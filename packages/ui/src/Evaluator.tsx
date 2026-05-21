@@ -1,12 +1,12 @@
-import { useReducer } from 'react';
-import { SCREENER_METRIC_CONFIG } from '@rpe/engine';
+import { useMemo } from 'react';
+import { evaluate, SCREENER_METRIC_CONFIG } from '@rpe/engine';
 import type { ScreenerResults } from '@rpe/engine';
-import { dealReducer } from './state/dealReducer';
-import { DEFAULT_INPUTS } from './state/defaultInputs';
-import { useEvaluate } from './hooks/useEvaluate';
 import { useSavedDeals } from './hooks/useSavedDeals';
+import { useScenarios } from './hooks/useScenarios';
 import { DealInputsForm } from './components/inputs/DealInputsForm';
 import { SavedDealsPanel } from './components/SavedDealsPanel';
+import { ScenarioTabs } from './components/ScenarioTabs';
+import { ComparisonPanel } from './components/ComparisonPanel';
 import { fmtCurrency, fmtPercent, fmtNumber, fmtMultiplier, NULL_DISPLAY } from './utils/format';
 import type { SavedDeal } from './state/savedDealsSchema';
 
@@ -21,7 +21,6 @@ function fmtMetric(key: MetricKey, value: number | null): string {
   const dec = cfg.decimals ?? 2;
   const unit = cfg.unit ?? '';
 
-  // Currency variants
   if (unit === '$' || unit === '$/mo' || unit === '$/yr' || unit === '$/sqft') {
     return fmtCurrency(value, dec > 0);
   }
@@ -30,19 +29,15 @@ function fmtMetric(key: MetricKey, value: number | null): string {
   return fmtNumber(value, dec);
 }
 
-/**
- * Returns 'pass' | 'fail' | 'null' | 'neutral' for a metric.
- * 'neutral' = direction is 'none' (informational).
- */
 function evalSignal(key: MetricKey, value: number | null): 'pass' | 'fail' | 'null' | 'neutral' {
   if (value === null) return 'null';
   const cfg = SCREENER_METRIC_CONFIG[key];
   if (cfg.direction === 'none' || cfg.threshold === undefined) return 'neutral';
-  return cfg.direction === 'higher' ? (value >= cfg.threshold ? 'pass' : 'fail')
-    : (value <= cfg.threshold ? 'pass' : 'fail');
+  return cfg.direction === 'higher'
+    ? value >= cfg.threshold ? 'pass' : 'fail'
+    : value <= cfg.threshold ? 'pass' : 'fail';
 }
 
-/** CSS color class for the signal. */
 const SIGNAL_CLASS: Record<ReturnType<typeof evalSignal>, string> = {
   pass: 'text-pass',
   fail: 'text-fail',
@@ -50,7 +45,6 @@ const SIGNAL_CLASS: Record<ReturnType<typeof evalSignal>, string> = {
   neutral: 'text-hi',
 };
 
-/** Dot background class for the signal. */
 const DOT_CLASS: Record<ReturnType<typeof evalSignal>, string> = {
   pass: 'bg-pass',
   fail: 'bg-fail',
@@ -58,20 +52,19 @@ const DOT_CLASS: Record<ReturnType<typeof evalSignal>, string> = {
   neutral: 'bg-muted',
 };
 
-/** Human-readable threshold note for a failing metric (e.g. "needs ≥ 1.25×"). */
 function thresholdNote(key: MetricKey, signal: ReturnType<typeof evalSignal>): string | null {
   if (signal !== 'fail') return null;
   const cfg = SCREENER_METRIC_CONFIG[key];
   if (cfg.threshold === undefined) return null;
-
   const dir = cfg.direction === 'higher' ? '≥' : '≤';
-  const val = cfg.unit === '%' ? fmtPercent(cfg.threshold, cfg.decimals ?? 1)
+  const val =
+    cfg.unit === '%' ? fmtPercent(cfg.threshold, cfg.decimals ?? 1)
     : cfg.unit === '×' ? fmtMultiplier(cfg.threshold, cfg.decimals ?? 2)
     : fmtNumber(cfg.threshold, cfg.decimals ?? 1);
   return `needs ${dir} ${val}`;
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// ─── Single-scenario sub-components ──────────────────────────────────────────
 
 interface MetricRowProps {
   metricKey: MetricKey;
@@ -88,26 +81,15 @@ function MetricRow({ metricKey, result, label }: MetricRowProps) {
 
   return (
     <div className="flex items-center gap-2 py-2 border-b border-border last:border-b-0">
-      {/* Signal dot */}
-      <span
-        className={`shrink-0 w-1.5 h-1.5 rounded-full ${DOT_CLASS[signal]}`}
-        aria-hidden="true"
-      />
-
-      {/* Label + threshold note */}
+      <span className={`shrink-0 w-1.5 h-1.5 rounded-full ${DOT_CLASS[signal]}`} aria-hidden="true" />
       <div className="flex-1 min-w-0">
-        <span
-          className="text-xs text-mid truncate block"
-          title={cfg.description}
-        >
+        <span className="text-xs text-mid truncate block" title={cfg.description}>
           {displayLabel}
         </span>
         {note && (
           <span className="text-[10px] text-fail/70 block leading-tight">{note}</span>
         )}
       </div>
-
-      {/* Value */}
       <span className={`num text-sm font-mono tabular-nums shrink-0 ${SIGNAL_CLASS[signal]}`}>
         {fmtMetric(metricKey, value)}
       </span>
@@ -115,12 +97,7 @@ function MetricRow({ metricKey, result, label }: MetricRowProps) {
   );
 }
 
-interface ResultGroupProps {
-  title: string;
-  children: React.ReactNode;
-}
-
-function ResultGroup({ title, children }: ResultGroupProps) {
+function ResultGroup({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="rounded border border-border bg-surface overflow-hidden">
       <div className="px-4 py-2 border-b border-border bg-raised">
@@ -131,43 +108,30 @@ function ResultGroup({ title, children }: ResultGroupProps) {
   );
 }
 
-// ─── Score summary ────────────────────────────────────────────────────────────
-
-/** Keys that have a pass/fail direction (excludes 'none'). */
 const SCORED_KEYS: MetricKey[] = (
   Object.entries(SCREENER_METRIC_CONFIG) as [MetricKey, (typeof SCREENER_METRIC_CONFIG)[MetricKey]][]
 )
   .filter(([, cfg]) => cfg.direction !== 'none')
   .map(([key]) => key);
 
-interface ScoreCardProps {
-  result: ScreenerResults;
-}
-
-function ScoreCard({ result }: ScoreCardProps) {
+function ScoreCard({ result }: { result: ScreenerResults }) {
   const signals = SCORED_KEYS.map((k) => evalSignal(k, result[k]));
   const total = signals.filter((s) => s !== 'null').length;
   const passing = signals.filter((s) => s === 'pass').length;
   const pct = total > 0 ? (passing / total) * 100 : 0;
-
-  const scoreColor =
-    pct >= 75 ? 'text-pass' : pct >= 50 ? 'text-warn' : 'text-fail';
+  const scoreColor = pct >= 75 ? 'text-pass' : pct >= 50 ? 'text-warn' : 'text-fail';
 
   return (
     <div className="rounded border border-border bg-surface p-4">
       <div className="flex items-baseline justify-between mb-2">
         <span className="section-title text-xs">Score</span>
         <span className={`num text-lg font-mono ${scoreColor}`}>
-          {passing}
-          <span className="text-lo text-sm">/{total}</span>
+          {passing}<span className="text-lo text-sm">/{total}</span>
         </span>
       </div>
-      {/* Progress bar */}
       <div className="h-1 rounded-full bg-raised overflow-hidden">
         <div
-          className={`h-full rounded-full transition-all ${
-            pct >= 75 ? 'bg-pass' : pct >= 50 ? 'bg-warn' : 'bg-fail'
-          }`}
+          className={`h-full rounded-full transition-all ${pct >= 75 ? 'bg-pass' : pct >= 50 ? 'bg-warn' : 'bg-fail'}`}
           style={{ width: `${pct}%` }}
           role="progressbar"
           aria-valuenow={passing}
@@ -176,25 +140,16 @@ function ScoreCard({ result }: ScoreCardProps) {
           aria-label={`${passing} of ${total} metrics passing`}
         />
       </div>
-      <p className="text-[10px] text-lo mt-1.5">
-        metrics meeting conventional thresholds
-      </p>
+      <p className="text-[10px] text-lo mt-1.5">metrics meeting conventional thresholds</p>
     </div>
   );
 }
 
-// ─── Results panel ────────────────────────────────────────────────────────────
-
-interface ResultsPanelProps {
-  results: ScreenerResults;
-}
-
-function ResultsPanel({ results }: ResultsPanelProps) {
+function ResultsPanel({ results }: { results: ScreenerResults }) {
   return (
     <div className="flex flex-col gap-4">
       <ScoreCard result={results} />
 
-      {/* ── Returns ──────────────────────────────────────────────────────── */}
       <ResultGroup title="Returns">
         <MetricRow metricKey="capRate" result={results} />
         <MetricRow metricKey="cocRoi" result={results} />
@@ -202,7 +157,6 @@ function ResultsPanel({ results }: ResultsPanelProps) {
         <MetricRow metricKey="cashFlowAnnual" result={results} label="Cash Flow / yr" />
       </ResultGroup>
 
-      {/* ── Deal Quality ─────────────────────────────────────────────────── */}
       <ResultGroup title="Deal Quality">
         <MetricRow metricKey="dscr" result={results} />
         <MetricRow metricKey="onePercentRule" result={results} label="1% Rule" />
@@ -213,7 +167,6 @@ function ResultsPanel({ results }: ResultsPanelProps) {
         <MetricRow metricKey="fiftyPctRuleDeviation" result={results} label="50% Rule Dev." />
       </ResultGroup>
 
-      {/* ── Income & Expenses ────────────────────────────────────────────── */}
       <ResultGroup title="Income & Expenses">
         <MetricRow metricKey="egi" result={results} label="EGI / mo" />
         <MetricRow metricKey="egiAnnual" result={results} label="EGI / yr" />
@@ -224,7 +177,6 @@ function ResultsPanel({ results }: ResultsPanelProps) {
         <MetricRow metricKey="piti" result={results} label="PITI / mo" />
       </ResultGroup>
 
-      {/* ── Loan ─────────────────────────────────────────────────────────── */}
       <ResultGroup title="Loan">
         <MetricRow metricKey="loanAmount" result={results} />
         <MetricRow metricKey="mortgagePayment" result={results} label="P&I / mo" />
@@ -234,15 +186,10 @@ function ResultsPanel({ results }: ResultsPanelProps) {
         <MetricRow metricKey="totalInterest" result={results} />
       </ResultGroup>
 
-      {/* ── Capital ──────────────────────────────────────────────────────── */}
       <ResultGroup title="Capital">
         <MetricRow metricKey="totalCashInvested" result={results} label="Total Cash In" />
-        {results.pricePerUnit !== null && (
-          <MetricRow metricKey="pricePerUnit" result={results} />
-        )}
-        {results.pricePerSqft !== null && (
-          <MetricRow metricKey="pricePerSqft" result={results} />
-        )}
+        {results.pricePerUnit !== null && <MetricRow metricKey="pricePerUnit" result={results} />}
+        {results.pricePerSqft !== null && <MetricRow metricKey="pricePerSqft" result={results} />}
       </ResultGroup>
     </div>
   );
@@ -253,27 +200,40 @@ function ResultsPanel({ results }: ResultsPanelProps) {
 /**
  * Top-level SPA component.
  *
- * State: `useReducer(dealReducer, DEFAULT_INPUTS)`
- * Evaluation: `useEvaluate` (memoised synchronous evaluate on blur-committed state)
- * Layout: sticky header / two-column (inputs | results), independently scrollable
+ * Single scenario: standard two-panel layout (inputs | ResultsPanel).
+ * 2–4 scenarios: ScenarioTabs on the inputs panel + ComparisonPanel on the right.
  */
 export function Evaluator() {
-  const [state, dispatch] = useReducer(dealReducer, DEFAULT_INPUTS);
-  const results = useEvaluate(state);
+  const {
+    scenarios,
+    activeIdx,
+    setActiveIdx,
+    activeInputs,
+    dispatchToActive,
+    addScenario,
+    removeScenario,
+    renameScenario,
+    replaceScenarioInputs,
+  } = useScenarios();
+
   const { deals, save, rename, remove } = useSavedDeals();
 
+  /** Evaluate all scenarios; recomputes only when scenario inputs change. */
+  const resultsList = useMemo(
+    () => scenarios.map((s) => evaluate(s.inputs) as ScreenerResults),
+    [scenarios],
+  );
+
+  const activeResults = resultsList[activeIdx] ?? (evaluate(activeInputs) as ScreenerResults);
+  const isComparing = scenarios.length > 1;
+
   const handleLoadDeal = (deal: SavedDeal) => {
-    dispatch({ type: 'LOAD', inputs: deal.inputs });
+    replaceScenarioInputs(activeIdx, deal.inputs);
   };
 
   return (
-    /*
-     * `h-dvh` + `min-h-0` on the flex-1 child creates a fixed viewport-height
-     * layout on desktop so the two panels scroll independently.
-     * On mobile the panels stack vertically and the page scrolls normally.
-     */
     <div className="h-dvh bg-base text-hi flex flex-col">
-      {/* ── Skip navigation ──────────────────────────────────────────────── */}
+      {/* ── Skip navigation ── */}
       <a
         href="#results"
         className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded focus:bg-raised focus:px-3 focus:py-1.5 focus:text-xs focus:text-accent"
@@ -281,7 +241,7 @@ export function Evaluator() {
         Skip to results
       </a>
 
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      {/* ── Header ── */}
       <header className="shrink-0 flex items-center justify-between gap-4 border-b border-border bg-base px-5 py-3">
         <div className="flex items-baseline gap-3">
           <h1 className="font-display text-xl tracking-wide text-hi">
@@ -291,16 +251,16 @@ export function Evaluator() {
         </div>
         <div className="flex items-center gap-2">
           <SavedDealsPanel
-            currentInputs={state}
+            currentInputs={activeInputs}
             deals={deals}
-            onSave={(name) => save(name, state)}
+            onSave={(name) => save(name, activeInputs)}
             onLoad={handleLoadDeal}
             onDelete={remove}
             onRename={rename}
           />
           <button
             type="button"
-            onClick={() => dispatch({ type: 'RESET' })}
+            onClick={() => dispatchToActive({ type: 'RESET' })}
             className="
               rounded border border-border px-3 py-1.5
               text-xs text-mid uppercase tracking-widest
@@ -313,17 +273,27 @@ export function Evaluator() {
         </div>
       </header>
 
-      {/* ── Body ─────────────────────────────────────────────────────────────── */}
+      {/* ── Body ── */}
       <main className="flex-1 min-h-0 flex flex-col lg:grid lg:grid-cols-[380px_1fr]">
         {/* Left — inputs */}
         <aside
           aria-label="Deal inputs"
-          className="overflow-y-auto border-b border-border lg:border-b-0 lg:border-r lg:border-border"
+          className="flex flex-col overflow-hidden border-b border-border lg:border-b-0 lg:border-r lg:border-border"
         >
-          <DealInputsForm state={state} dispatch={dispatch} />
+          <ScenarioTabs
+            scenarios={scenarios}
+            activeIdx={activeIdx}
+            onSelect={setActiveIdx}
+            onAdd={addScenario}
+            onRemove={removeScenario}
+            onRename={renameScenario}
+          />
+          <div className="flex-1 overflow-y-auto">
+            <DealInputsForm state={activeInputs} dispatch={dispatchToActive} />
+          </div>
         </aside>
 
-        {/* Right — results (aria-live so screen readers announce re-evaluations) */}
+        {/* Right — results */}
         <section
           id="results"
           aria-label="Evaluation results"
@@ -331,7 +301,11 @@ export function Evaluator() {
           aria-atomic="false"
           className="overflow-y-auto p-5"
         >
-          <ResultsPanel results={results} />
+          {isComparing ? (
+            <ComparisonPanel scenarios={scenarios} resultsList={resultsList} />
+          ) : (
+            <ResultsPanel results={activeResults} />
+          )}
         </section>
       </main>
     </div>
