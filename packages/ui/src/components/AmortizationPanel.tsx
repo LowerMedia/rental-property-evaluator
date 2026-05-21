@@ -56,28 +56,28 @@ function AmortizationChart({ years, crossoverIdx }: ChartProps) {
 
           return (
             <g key={y.year} aria-label={`Year ${y.year}`}>
-              {/* Interest (top — amber) */}
+              {/* Interest (top segment — amber); bars are bottom-aligned, growing up from CHART_H. */}
               <rect
                 x={x}
-                y={0}
+                y={CHART_H - principalH - interestH}
                 width={barW}
                 height={interestH}
                 fill="var(--color-accent-dim)"
                 opacity={isEven ? 1 : 0.85}
               />
-              {/* Principal (bottom — green) */}
+              {/* Principal (bottom segment — green) */}
               <rect
                 x={x}
-                y={interestH}
+                y={CHART_H - principalH}
                 width={barW}
                 height={principalH}
                 fill="var(--color-pass)"
                 opacity={isEven ? 1 : 0.85}
               />
-              {/* Crossover marker */}
+              {/* Crossover marker — x clamped to 0 so the year-1 outline stays in-bounds. */}
               {i === crossoverIdx && (
                 <rect
-                  x={x - 1}
+                  x={Math.max(0, x - 1)}
                   y={0}
                   width={barW + 2}
                   height={CHART_H}
