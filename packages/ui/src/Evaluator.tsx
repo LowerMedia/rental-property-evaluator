@@ -1,5 +1,5 @@
 import { useMemo, useState, useCallback } from 'react';
-import { evaluate, SCREENER_METRIC_CONFIG } from '@rpe/engine';
+import { evaluate, SCREENER_METRIC_CONFIG, calcLoanAmount, normalizeInputs } from '@rpe/engine';
 import type { DealInputs, ScreenerResults } from '@rpe/engine';
 import { useSavedDeals } from './hooks/useSavedDeals';
 import { useScenarios } from './hooks/useScenarios';
@@ -9,6 +9,7 @@ import { DealInputsForm } from './components/inputs/DealInputsForm';
 import { SavedDealsPanel } from './components/SavedDealsPanel';
 import { ScenarioTabs } from './components/ScenarioTabs';
 import { ComparisonPanel } from './components/ComparisonPanel';
+import { AmortizationPanel } from './components/AmortizationPanel';
 import { fmtCurrency, fmtPercent, fmtNumber, fmtMultiplier, NULL_DISPLAY } from './utils/format';
 import type { SavedDeal } from './state/savedDealsSchema';
 
@@ -267,6 +268,9 @@ export function Evaluator() {
   const activeResults = resultsList[activeIdx] ?? (evaluate(activeInputs) as ScreenerResults);
   const isComparing = scenarios.length > 1;
 
+  /** Normalize active inputs once; used by AmortizationPanel to avoid triple-calling normalizeInputs. */
+  const activeNormalized = useMemo(() => normalizeInputs(activeInputs), [activeInputs]);
+
   const handleLoadDeal = (deal: SavedDeal) => {
     replaceScenarioInputs(activeIdx, deal.inputs);
   };
@@ -371,7 +375,14 @@ export function Evaluator() {
           {isComparing ? (
             <ComparisonPanel scenarios={scenarios} resultsList={resultsList} />
           ) : (
-            <ResultsPanel results={activeResults} />
+            <div className="flex flex-col gap-4">
+              <ResultsPanel results={activeResults} />
+              <AmortizationPanel
+                loanAmount={calcLoanAmount(activeNormalized)}
+                interestRate={activeNormalized.interestRate}
+                loanTermYears={activeNormalized.loanTermYears}
+              />
+            </div>
           )}
         </section>
       </main>
