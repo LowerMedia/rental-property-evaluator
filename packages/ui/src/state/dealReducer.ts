@@ -22,7 +22,8 @@ type NumericDealKey =
   | 'expenseGrowthPct'
   | 'appreciationPct'
   | 'sellingCostsPct'
-  | 'marginalTaxPct';
+  | 'marginalTaxPct'
+  | 'discountRatePct';
 
 /** All top-level DealInputs keys that hold a boolean (or undefined boolean). */
 type BooleanDealKey = 'rollClosingCostsIntoLoan' | 'capExInNOI';
