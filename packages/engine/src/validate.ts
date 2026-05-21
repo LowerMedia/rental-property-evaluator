@@ -104,6 +104,10 @@ export function normalizeInputs(raw: DealInputs): DealInputs {
       raw.marginalTaxPct !== undefined
         ? clampPercent(safeNum(raw.marginalTaxPct))
         : undefined,
+    discountRatePct:
+      raw.discountRatePct !== undefined
+        ? clampNonNeg(safeNum(raw.discountRatePct))
+        : undefined,
 
     capExInNOI: raw.capExInNOI !== undefined ? Boolean(raw.capExInNOI) : undefined,
   };
