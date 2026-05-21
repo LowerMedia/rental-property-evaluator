@@ -55,6 +55,14 @@ export {
   SHARE_PARAM,
 } from './utils/shareUrl';
 
+export {
+  escapeCsvCell,
+  rowsToCsv,
+  buildCsvRows,
+  downloadCsv,
+  exportToCsv,
+} from './utils/exportCsv';
+
 // ── Input components ─────────────────────────────────────────────────────────
 export { CurrencyInput } from './components/inputs/CurrencyInput';
 export { PercentInput } from './components/inputs/PercentInput';

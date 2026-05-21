@@ -4,6 +4,7 @@ import type { DealInputs, ScreenerResults } from '@rpe/engine';
 import { useSavedDeals } from './hooks/useSavedDeals';
 import { useScenarios } from './hooks/useScenarios';
 import { buildShareUrl } from './utils/shareUrl';
+import { exportToCsv } from './utils/exportCsv';
 import { DealInputsForm } from './components/inputs/DealInputsForm';
 import { SavedDealsPanel } from './components/SavedDealsPanel';
 import { ScenarioTabs } from './components/ScenarioTabs';
@@ -295,6 +296,19 @@ export function Evaluator() {
             onRename={rename}
           />
           <ShareButton inputs={activeInputs} />
+          <button
+            type="button"
+            onClick={() => exportToCsv(scenarios, resultsList)}
+            className="
+              rounded border border-border px-3 py-1.5
+              text-xs text-mid uppercase tracking-widest
+              hover:border-accent hover:text-accent
+              transition-colors
+            "
+            title="Download results as CSV"
+          >
+            CSV
+          </button>
           <button
             type="button"
             onClick={() => dispatchToActive({ type: 'RESET' })}
