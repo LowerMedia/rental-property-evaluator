@@ -1,0 +1,157 @@
+@import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Barlow:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap");
+@import "tailwindcss";
+
+/* Scan all workspace packages — covers any future @rpe/* package automatically */
+@source "../../../packages";
+
+/* ── Midnight Ledger theme ──────────────────────────────────────────────── */
+@theme {
+  --font-display: "Cormorant Garamond", Georgia, serif;
+  --font-sans: "Barlow", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Courier New", monospace;
+
+  /* Backgrounds */
+  --color-base:    #090909;
+  --color-surface: #111111;
+  --color-raised:  #191919;
+  --color-input:   #141414;
+
+  /* Borders */
+  --color-border:  #222222;
+  --color-border-2: #2e2e2e;
+
+  /* Text */
+  --color-hi:      #f5f0e8;
+  --color-mid:     #9a9390;
+  --color-lo:      #5a5652;
+  --color-muted:   #333333;
+
+  /* Accent — amber/gold */
+  --color-accent:  #e8a030;
+  --color-accent-dim: #7a5418;
+
+  /* Signals */
+  --color-pass:    #22c55e;
+  --color-fail:    #ef4444;
+  --color-warn:    #f59e0b;
+  --color-null:    #3d3a37;
+
+  /* Spacing extras */
+  --spacing-18: 4.5rem;
+  --spacing-22: 5.5rem;
+}
+
+/* ── Base ───────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  font-family: var(--font-sans);
+  background-color: var(--color-base);
+  color: var(--color-hi);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body { margin: 0; min-height: 100dvh; }
+
+/* Number values — always monospaced with tabular figures */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Section title style */
+.section-title {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--color-hi);
+  text-transform: uppercase;
+  font-variant: small-caps;
+}
+
+/* Input focus ring — amber, no browser default */
+input:focus-visible, select:focus-visible, button:focus-visible {
+  outline: 1.5px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Scrollbar — minimal */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-muted); border-radius: 2px; }
+
+/* ── Print / PDF ────────────────────────────────────────────────────────── */
+@media print {
+  /* Light-theme variable overrides */
+  :root {
+    --color-base:      #ffffff;
+    --color-surface:   #f7f7f7;
+    --color-raised:    #eeeeee;
+    --color-input:     #f2f2f2;
+    --color-border:    #d8d8d8;
+    --color-border-2:  #c0c0c0;
+    --color-hi:        #111111;
+    --color-mid:       #555555;
+    --color-lo:        #888888;
+    --color-muted:     #cccccc;
+    --color-accent:    #b07010;
+    --color-accent-dim:#ddaa44;
+    --color-pass:      #166534;
+    --color-fail:      #991b1b;
+    --color-warn:      #92400e;
+    --color-null:      #999999;
+  }
+
+  /* Reset page fundamentals */
+  html, body {
+    background: #fff !important;
+    color: #111 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Hide anything marked no-print (header buttons, inputs panel, tabs) */
+  .no-print { display: none !important; }
+
+  /* Remove the full-viewport height constraint */
+  .h-dvh { height: auto !important; }
+
+  /* Full-width single-column layout */
+  .lg\:grid-cols-\[380px_1fr\] { display: block !important; }
+
+  /* Remove overflow clipping so all content is visible */
+  .overflow-hidden,
+  .overflow-y-auto { overflow: visible !important; }
+
+  /* Results section — full page width, standard margin */
+  #results {
+    padding: 1.5cm 1cm !important;
+    display: block;
+  }
+
+  /* Result group cards — no shadows, solid light borders */
+  .rounded.border.border-border.bg-surface {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Prevent metric rows from splitting across pages */
+  .flex.items-center.gap-2.py-2.border-b {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Show the header title area for context, but minimal */
+  header {
+    border-bottom: 1px solid #d0d0d0 !important;
+    padding: 0.5cm 1cm !important;
+    background: #fff !important;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+}
