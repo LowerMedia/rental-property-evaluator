@@ -286,7 +286,7 @@ export function Evaluator() {
           </h1>
           <span className="hidden text-xs text-lo sm:inline">Screener</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="no-print flex items-center gap-2">
           <SavedDealsPanel
             currentInputs={activeInputs}
             deals={deals}
@@ -311,6 +311,19 @@ export function Evaluator() {
           </button>
           <button
             type="button"
+            onClick={() => window.print()}
+            className="
+              rounded border border-border px-3 py-1.5
+              text-xs text-mid uppercase tracking-widest
+              hover:border-accent hover:text-accent
+              transition-colors
+            "
+            title="Print or save as PDF"
+          >
+            Print
+          </button>
+          <button
+            type="button"
             onClick={() => dispatchToActive({ type: 'RESET' })}
             className="
               rounded border border-border px-3 py-1.5
@@ -326,10 +339,10 @@ export function Evaluator() {
 
       {/* ── Body ── */}
       <main className="flex-1 min-h-0 flex flex-col lg:grid lg:grid-cols-[380px_1fr]">
-        {/* Left — inputs */}
+        {/* Left — inputs (hidden in print) */}
         <aside
           aria-label="Deal inputs"
-          className="flex flex-col overflow-hidden border-b border-border lg:border-b-0 lg:border-r lg:border-border"
+          className="no-print flex flex-col overflow-hidden border-b border-border lg:border-b-0 lg:border-r lg:border-border"
         >
           <ScenarioTabs
             scenarios={scenarios}

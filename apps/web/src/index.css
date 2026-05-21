@@ -81,3 +81,77 @@ input:focus-visible, select:focus-visible, button:focus-visible {
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--color-muted); border-radius: 2px; }
+
+/* ── Print / PDF ────────────────────────────────────────────────────────── */
+@media print {
+  /* Light-theme variable overrides */
+  :root {
+    --color-base:      #ffffff;
+    --color-surface:   #f7f7f7;
+    --color-raised:    #eeeeee;
+    --color-input:     #f2f2f2;
+    --color-border:    #d8d8d8;
+    --color-border-2:  #c0c0c0;
+    --color-hi:        #111111;
+    --color-mid:       #555555;
+    --color-lo:        #888888;
+    --color-muted:     #cccccc;
+    --color-accent:    #b07010;
+    --color-accent-dim:#ddaa44;
+    --color-pass:      #166534;
+    --color-fail:      #991b1b;
+    --color-warn:      #92400e;
+    --color-null:      #999999;
+  }
+
+  /* Reset page fundamentals */
+  html, body {
+    background: #fff !important;
+    color: #111 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Hide anything marked no-print (header buttons, inputs panel, tabs) */
+  .no-print { display: none !important; }
+
+  /* Remove the full-viewport height constraint */
+  .h-dvh { height: auto !important; }
+
+  /* Full-width single-column layout */
+  .lg\:grid-cols-\[380px_1fr\] { display: block !important; }
+
+  /* Remove overflow clipping so all content is visible */
+  .overflow-hidden,
+  .overflow-y-auto { overflow: visible !important; }
+
+  /* Results section — full page width, standard margin */
+  #results {
+    padding: 1.5cm 1cm !important;
+    display: block;
+  }
+
+  /* Result group cards — no shadows, solid light borders */
+  .rounded.border.border-border.bg-surface {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Prevent metric rows from splitting across pages */
+  .flex.items-center.gap-2.py-2.border-b {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Show the header title area for context, but minimal */
+  header {
+    border-bottom: 1px solid #d0d0d0 !important;
+    padding: 0.5cm 1cm !important;
+    background: #fff !important;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+}
