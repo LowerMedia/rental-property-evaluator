@@ -18,6 +18,10 @@ export type {
 } from './types';
 
 export { safeNum, clamp, clampPercent, clampNonNeg, normalizeInputs } from './validate';
+export { pmt, amortize } from './finance';
+export type { AmortizationRow, AmortizationSchedule } from './finance';
+export { calcLoanAmount, calcLoan } from './loan';
+export type { LoanResult } from './loan';
 
 import type { DealInputs, EvalOptions, Results } from './types';
 
