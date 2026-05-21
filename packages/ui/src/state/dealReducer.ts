@@ -1,0 +1,52 @@
+import type { DealExpenses, DealInputs, ExpenseInput } from '@rpe/engine';
+import { DEFAULT_INPUTS } from './defaultInputs';
+
+// ─── Actions ─────────────────────────────────────────────────────────────────
+
+export type DealAction =
+  | { type: 'SET_NUMBER'; field: keyof DealInputs; value: number }
+  | { type: 'SET_BOOL'; field: keyof DealInputs; value: boolean }
+  | { type: 'SET_EXPENSE_PCT'; field: 'capExPct' | 'maintPct' | 'mgmtPct' | 'miscPct'; value: number }
+  | {
+      type: 'SET_EXPENSE_FIXED';
+      field: 'taxes' | 'insurance' | 'hoa' | 'other';
+      amount: number;
+      period: ExpenseInput['period'];
+    }
+  | { type: 'RESET' };
+
+// ─── Reducer ─────────────────────────────────────────────────────────────────
+
+export function dealReducer(state: DealInputs, action: DealAction): DealInputs {
+  switch (action.type) {
+    case 'SET_NUMBER':
+      return { ...state, [action.field]: action.value };
+
+    case 'SET_BOOL':
+      return { ...state, [action.field]: action.value };
+
+    case 'SET_EXPENSE_PCT':
+      return {
+        ...state,
+        expenses: { ...state.expenses, [action.field]: action.value },
+      };
+
+    case 'SET_EXPENSE_FIXED': {
+      const prev = state.expenses[action.field] as ExpenseInput | undefined;
+      const updated: DealExpenses = {
+        ...state.expenses,
+        [action.field]: {
+          amount: action.amount,
+          period: action.period ?? prev?.period ?? 'annual',
+        },
+      };
+      return { ...state, expenses: updated };
+    }
+
+    case 'RESET':
+      return { ...DEFAULT_INPUTS };
+
+    default:
+      return state;
+  }
+}
