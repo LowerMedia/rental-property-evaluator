@@ -714,3 +714,146 @@ describe('calcProForma — purchasePrice = 0 guard', () => {
     expect(result.screener.capRate).toBeNull();
   });
 });
+
+// ─── RPE-33: IRR / NPV / equity multiple ─────────────────────────────────────
+
+import { calcIRR, calcNPV } from '../src/index';
+
+describe('calcIRR — basic cases', () => {
+  it('returns null for fewer than 2 cash flows', () => {
+    expect(calcIRR([])).toBeNull();
+    expect(calcIRR([-1000])).toBeNull();
+  });
+
+  it('returns null when all cash flows are non-negative', () => {
+    expect(calcIRR([1000, 500, 200])).toBeNull();
+  });
+
+  it('returns null when all cash flows are non-positive', () => {
+    expect(calcIRR([-1000, -500])).toBeNull();
+  });
+
+  it('calculates IRR for a simple 1-year investment at 10%', () => {
+    // -1000 now, +1100 in year 1 → IRR = 10%
+    const irr = calcIRR([-1000, 1100]);
+    expect(irr).not.toBeNull();
+    expect(irr!).toBeCloseTo(10, 4);
+  });
+
+  it('calculates IRR for a multi-year series at ~15%', () => {
+    // Known: -10000, +3000×5 → IRR ≈ 15.24%
+    const irr = calcIRR([-10_000, 3_000, 3_000, 3_000, 3_000, 3_000]);
+    expect(irr).not.toBeNull();
+    expect(irr!).toBeCloseTo(15.24, 1);
+  });
+
+  it('IRR is consistent with NPV = 0 at that rate', () => {
+    const cashFlows = [-100_000, 12_000, 12_000, 12_000, 12_000, 112_000];
+    const irr = calcIRR(cashFlows);
+    expect(irr).not.toBeNull();
+    const npvAtIRR = calcNPV(cashFlows, irr!);
+    expect(Math.abs(npvAtIRR)).toBeLessThan(0.01); // NPV ≈ 0 at IRR
+  });
+
+  it('returns a valid IRR for a typical real estate deal', () => {
+    // $60k invested, $500/mo cash flow × 5 yr, $360k equity at exit
+    const invested = 60_000;
+    const annualCF = 6_000;
+    const terminalEquity = 360_000;
+    const cashFlows = [
+      -invested,
+      annualCF, annualCF, annualCF, annualCF,
+      annualCF + terminalEquity,
+    ];
+    const irr = calcIRR(cashFlows);
+    expect(irr).not.toBeNull();
+    expect(irr!).toBeGreaterThan(0);
+    expect(irr!).toBeLessThan(200); // sanity bound
+  });
+});
+
+describe('calcNPV — basic cases', () => {
+  it('NPV at 0% equals sum of all cash flows', () => {
+    const cfs = [-1000, 200, 300, 400, 200];
+    const sum = cfs.reduce((a, b) => a + b, 0);
+    expect(calcNPV(cfs, 0)).toBeCloseTo(sum, 6);
+  });
+
+  it('NPV decreases as discount rate increases', () => {
+    const cfs = [-1000, 400, 400, 400];
+    const npv5 = calcNPV(cfs, 5);
+    const npv10 = calcNPV(cfs, 10);
+    expect(npv5).toBeGreaterThan(npv10);
+  });
+
+  it('NPV is negative for returns below the hurdle rate', () => {
+    // 5% return stream, 10% hurdle → NPV < 0
+    const cfs = [-1000, 1050];
+    expect(calcNPV(cfs, 10)).toBeLessThan(0);
+  });
+
+  it('NPV is positive for returns above the hurdle rate', () => {
+    // 20% return stream, 10% hurdle → NPV > 0
+    const cfs = [-1000, 1200];
+    expect(calcNPV(cfs, 10)).toBeGreaterThan(0);
+  });
+});
+
+describe('calcProForma — IRR / NPV / equityMultiple (RPE-33)', () => {
+  const inputs = normalizeInputs({
+    ...BASE,
+    holdYears: 5,
+    appreciationPct: 3,
+    rentGrowthPct: 0,
+    expenseGrowthPct: 0,
+    discountRatePct: 10,
+  });
+
+  it('evaluate() in proforma mode includes irr, npv, equityMultiple', () => {
+    const result = evaluate(inputs, { mode: 'proforma' }) as import('../src/types').ProFormaResults;
+    expect('irr' in result).toBe(true);
+    expect('npv' in result).toBe(true);
+    expect('equityMultiple' in result).toBe(true);
+  });
+
+  it('irr is a positive number for a viable deal', () => {
+    const result = evaluate(inputs, { mode: 'proforma' }) as import('../src/types').ProFormaResults;
+    expect(result.irr).not.toBeNull();
+    expect(result.irr!).toBeGreaterThan(0);
+  });
+
+  it('npv is non-null when discountRatePct is provided', () => {
+    const result = evaluate(inputs, { mode: 'proforma' }) as import('../src/types').ProFormaResults;
+    expect(result.npv).not.toBeNull();
+  });
+
+  it('npv is null when discountRatePct is not provided', () => {
+    const inputsNoRate = normalizeInputs({ ...BASE, holdYears: 5, appreciationPct: 3 });
+    const result = evaluate(inputsNoRate, { mode: 'proforma' }) as import('../src/types').ProFormaResults;
+    expect(result.npv).toBeNull();
+  });
+
+  it('equityMultiple > 1 when the deal returns more than invested', () => {
+    const result = evaluate(inputs, { mode: 'proforma' }) as import('../src/types').ProFormaResults;
+    expect(result.equityMultiple).not.toBeNull();
+    // 5 years of cash flow + 3% appreciation → should return > 1×
+    expect(result.equityMultiple!).toBeGreaterThan(1);
+  });
+
+  it('irr, npv, equityMultiple are all null when projection is empty', () => {
+    const inputsNoHold = normalizeInputs({ ...BASE, discountRatePct: 10 });
+    const result = evaluate(inputsNoHold, { mode: 'proforma' }) as import('../src/types').ProFormaResults;
+    expect(result.irr).toBeNull();
+    expect(result.npv).toBeNull();
+    expect(result.equityMultiple).toBeNull();
+  });
+
+  it('equityMultiple = (totalCashFlow + terminalEquity) / totalCashInvested', () => {
+    const result = evaluate(inputs, { mode: 'proforma' }) as import('../src/types').ProFormaResults;
+    const { projection, screener } = result;
+    const lastYear = projection[projection.length - 1]!;
+    const totalCF = projection.reduce((s, y) => s + y.cashFlowAnnual, 0);
+    const expected = (totalCF + lastYear.equity) / screener.totalCashInvested!;
+    expect(result.equityMultiple!).toBeCloseTo(expected, 6);
+  });
+});

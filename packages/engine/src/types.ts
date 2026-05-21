@@ -81,6 +81,11 @@ export interface DealInputs {
   /** Marginal income tax rate in percent (for after-tax cash flow). */
   marginalTaxPct?: number;
   /**
+   * Investor's required rate of return / hurdle rate in percent (used for NPV, RPE-33).
+   * Example: 10 = 10%. When absent, NPV is not computed (null in ProFormaResults).
+   */
+  discountRatePct?: number;
+  /**
    * When true (default), CapEx reserve is included in OpEx → NOI is conservative.
    * When false, CapEx excluded from OpEx (lender convention).
    */
@@ -246,13 +251,33 @@ export interface ProjectionYear {
 }
 
 /**
- * Pro-forma results — screener snapshot + multi-year projection.
- * IRR / NPV / equity multiple added in RPE-33; exit modeling in RPE-34.
+ * Pro-forma results — screener snapshot + multi-year projection + hold-period summary.
+ * Exit modeling (selling costs, capital gains, net proceeds) added in RPE-34.
  */
 export interface ProFormaResults {
   screener: ScreenerResults;
   /** Year-by-year projections. Length = holdYears (empty array if holdYears is absent/0). */
   projection: ProjectionYear[];
+
+  // ── Hold-period summary (RPE-33) ──────────────────────────────────────────
+  /**
+   * Annualized IRR in percent (e.g. 12.5 = 12.5 %).
+   * Cash flows: [−totalCashInvested, CF₁, CF₂, …, CF_N + terminalEquity].
+   * terminalEquity = propertyValue − loanBalance at the end of holdYears.
+   * Null if projection is empty or IRR fails to converge.
+   */
+  irr: number | null;
+  /**
+   * Net Present Value of all cash flows discounted at discountRatePct.
+   * Null when discountRatePct is not provided.
+   */
+  npv: number | null;
+  /**
+   * Equity Multiple = (cumulative cash flow over holdYears + terminal equity) / totalCashInvested.
+   * Represents how many times the investor's capital was returned.
+   * Null when projection is empty or totalCashInvested is 0.
+   */
+  equityMultiple: number | null;
 }
 
 export type EvalMode = 'screener' | 'proforma';
