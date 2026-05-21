@@ -170,13 +170,53 @@ export interface ScreenerResults {
   fiftyPctRuleDeviation: number | null;
 }
 
+// ─── Pro-forma types (RPE-E4) ─────────────────────────────────────────────────
+
 /**
- * Pro-forma results — multi-year projections, amortization, IRR/NPV, exit modeling.
- * Stub type; fully defined and implemented in RPE-E4.
+ * Single year in the multi-year hold projection (RPE-29).
+ *
+ * Year 1 = first full year of ownership at base rates (no growth applied yet).
+ * Year 2 = Year 1 × growth factors, etc.
+ *
+ * Convention:
+ *   - % of rent expenses (capEx, maint, mgmt, misc) grow with rent growth.
+ *   - Fixed dollar expenses (taxes, insurance, HOA, other) grow at expenseGrowthPct.
+ *   - Debt service is fixed (fixed-rate mortgage).
+ *   - Property value compounds at appreciationPct applied to purchasePrice.
+ */
+export interface ProjectionYear {
+  /** 1-indexed; Year 1 = base year, Year N = last year of hold. */
+  year: number;
+  /** Gross potential rent for the year (grows at rentGrowthPct). */
+  grossRentAnnual: number;
+  /** EGI = (grossRent + otherIncome) × (1 − vacancy%) for the year. */
+  egiAnnual: number;
+  /** Operating expenses for the year (% components track rent; fixed components grow at expenseGrowthPct). */
+  opExAnnual: number;
+  /** NOI = egiAnnual − opExAnnual. */
+  noiAnnual: number;
+  /** Annual debt service (P&I × 12). Fixed throughout hold; 0 for cash purchases. */
+  annualDebtService: number;
+  /** Cash flow = noiAnnual − annualDebtService. */
+  cashFlowAnnual: number;
+  /** Running total of cash flows from Year 1 through this year. */
+  cumulativeCashFlow: number;
+  /** Remaining loan balance at end-of-year. 0 for cash purchases or after loan payoff. */
+  loanBalance: number;
+  /** Estimated property value at end-of-year = purchasePrice × (1 + appreciationPct/100)^year. */
+  propertyValue: number;
+  /** Equity = propertyValue − loanBalance. */
+  equity: number;
+}
+
+/**
+ * Pro-forma results — screener snapshot + multi-year projection.
+ * IRR / NPV / equity multiple added in RPE-33; exit modeling in RPE-34.
  */
 export interface ProFormaResults {
   screener: ScreenerResults;
-  // Extended pro-forma fields added in RPE-E4 (multi-year, IRR, NPV, equity, exit, depreciation)
+  /** Year-by-year projections. Length = holdYears (empty array if holdYears is absent/0). */
+  projection: ProjectionYear[];
 }
 
 export type EvalMode = 'screener' | 'proforma';
