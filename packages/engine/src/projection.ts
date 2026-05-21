@@ -71,6 +71,12 @@ export function calcProjection(inputs: DealInputs): ProjectionYear[] {
   // Use floored loanTermYears so the amortization schedule and debt-service guard
   // are consistent with the per-year loop index comparisons.
   const loanAmount = calcLoanAmount(inputs);
+
+  // Guard: a non-zero loan with loanTermYears = 0 would produce a null amortization
+  // schedule, making all loanBalance values silently 0 (equity overstated).
+  // Return an empty projection rather than produce misleading rows.
+  if (loanAmount > 0 && loanTermYears <= 0) return [];
+
   const monthlyPayment = loanAmount > 0
     ? pmt(loanAmount, inputs.interestRate, loanTermYears)
     : null;

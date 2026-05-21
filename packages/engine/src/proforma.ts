@@ -18,8 +18,17 @@ import type { DealInputs, ProFormaResults } from './types';
  * The projection array covers Years 1..holdYears (empty if holdYears is absent/0).
  */
 export function calcProForma(inputs: DealInputs): ProFormaResults {
+  const screener = calcScreener(inputs);
+
+  // Guard: purchasePrice = 0 causes calcScreener() to return an all-null snapshot.
+  // Projecting in that case would yield numeric rows that contradict the null screener,
+  // producing an internally inconsistent result. Return an empty projection instead.
+  if (inputs.purchasePrice <= 0) {
+    return { screener, projection: [] };
+  }
+
   return {
-    screener: calcScreener(inputs),
+    screener,
     projection: calcProjection(inputs),
   };
 }

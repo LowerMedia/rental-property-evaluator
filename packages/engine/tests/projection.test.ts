@@ -445,3 +445,36 @@ describe('calcProjection — other income grows with rent', () => {
     expect(projection[1]!.egiAnnual).toBeCloseTo(projection[0]!.egiAnnual * 1.05, 4);
   });
 });
+
+// ─── guard: loanTermYears = 0 with non-zero loan (RPE-29 review fix) ─────────
+
+describe('calcProjection — loanTermYears = 0 guard', () => {
+  it('returns empty array when there is a loan but loanTermYears = 0', () => {
+    // percentDown < 100 → loanAmount > 0; loanTermYears = 0 → invalid combination
+    const inputs = normalizeInputs({ ...BASE, holdYears: 5, loanTermYears: 0 });
+    expect(calcProjection(inputs)).toEqual([]);
+  });
+
+  it('returns rows as normal for a cash purchase (percentDown = 100, loanTermYears = 0)', () => {
+    // With no loan, loanTermYears = 0 is harmless
+    const inputs = normalizeInputs({ ...BASE, percentDown: 100, holdYears: 3, loanTermYears: 0 });
+    expect(calcProjection(inputs).length).toBe(3);
+  });
+});
+
+// ─── guard: purchasePrice = 0 in calcProForma (RPE-29 review fix) ────────────
+
+describe('calcProForma — purchasePrice = 0 guard', () => {
+  it('returns empty projection when purchasePrice = 0', () => {
+    const inputs = normalizeInputs({ ...BASE, purchasePrice: 0, holdYears: 5 });
+    const result = calcProForma(inputs);
+    expect(result.projection).toEqual([]);
+  });
+
+  it('screener snapshot is still returned (all-null) when purchasePrice = 0', () => {
+    const inputs = normalizeInputs({ ...BASE, purchasePrice: 0, holdYears: 5 });
+    const result = calcProForma(inputs);
+    // screener.capRate should be null (can't divide by 0 purchase price)
+    expect(result.screener.capRate).toBeNull();
+  });
+});
