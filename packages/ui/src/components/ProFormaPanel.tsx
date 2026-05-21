@@ -7,6 +7,7 @@
 
 import type { ProFormaResults, ProjectionYear } from '@rpe/engine';
 import { fmtCurrency, fmtPercent, fmtMultiplier, NULL_DISPLAY } from '../utils/format';
+import { CashFlowChart, EquityBuildChart } from './ProFormaCharts';
 
 // ─── KPI card ─────────────────────────────────────────────────────────────────
 
@@ -160,9 +161,10 @@ function EmptyProForma() {
 
 export interface ProFormaPanelProps {
   results: ProFormaResults;
+  purchasePrice: number;
 }
 
-export function ProFormaPanel({ results }: ProFormaPanelProps) {
+export function ProFormaPanel({ results, purchasePrice }: ProFormaPanelProps) {
   const { projection, irr, npv, equityMultiple, netSaleProceeds, totalProfit,
           salePrice, sellingCosts } = results;
 
@@ -216,6 +218,18 @@ export function ProFormaPanel({ results }: ProFormaPanelProps) {
           sellingCosts={sellingCosts}
           netSaleProceeds={netSaleProceeds}
         />
+      )}
+
+      {/* ── Charts ───────────────────────────────────────────────────────── */}
+      {!isEmpty && (
+        <div className="rounded border border-border bg-surface px-4 py-4 flex flex-col gap-6">
+          <CashFlowChart years={projection} />
+          <EquityBuildChart
+            years={projection}
+            purchasePrice={purchasePrice}
+            initialLoanBalance={results.screener.loanAmount ?? 0}
+          />
+        </div>
       )}
 
       {/* ── Projection table ─────────────────────────────────────────────── */}
