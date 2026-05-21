@@ -5,8 +5,6 @@
  * Run once at app boot, before any other storage access.
  * See docs/legacy-storage.md for the full legacy shape spec.
  *
- * NOTE: the DealInputs import below is wired once RPE-12 lands.
- * Until then the shape is documented inline for reference.
  */
 
 const LEGACY_KEY = 'changeableRPE';
