@@ -158,15 +158,44 @@ export function calcScreener(inputs: DealInputs): ScreenerResults {
   const grossRentAnnual = grossRent * 12;
   const grm: number | null = grossRentAnnual > 0 ? purchasePrice / grossRentAnnual : null;
 
-  // ── New screener metrics — implemented in RPE-16 ─────────────────────────
-  const breakEvenOccupancy: number | null = null;
-  const expenseRatio: number | null = null;
-  const ltv: number | null = null;
-  const debtYield: number | null = null;
-  const grossYield: number | null = null;
-  const pricePerUnit: number | null = null;
-  const pricePerSqft: number | null = null;
-  const fiftyPctRuleDeviation: number | null = null;
+  // ── New screener metrics (RPE-16) ────────────────────────────────────────
+
+  // Break-even occupancy: (opExMonthly + mortgagePayment) / grossPotentialRent × 100
+  // "How empty can it get before I bleed." Cash buyer: mortgage term is 0.
+  const grossPotentialRent = grossRent + otherIncome;
+  const debtService = loan.mortgagePayment ?? 0;
+  const breakEvenOccupancy =
+    grossPotentialRent > 0
+      ? ((opExMonthly + debtService) / grossPotentialRent) * 100
+      : null;
+
+  // Expense ratio: opExAnnual / egiAnnual × 100 (lower = better, norm 35–45%)
+  const expenseRatio = egiAnnual > 0 ? (opExAnnual / egiAnnual) * 100 : null;
+
+  // LTV: loanAmount / purchasePrice × 100
+  const ltv = (loan.loanAmount / purchasePrice) * 100;
+
+  // Debt yield (lender metric): NOI_annual / loanAmount × 100
+  const debtYield =
+    loan.loanAmount > 0 ? (noiAnnual / loan.loanAmount) * 100 : null;
+
+  // Gross yield: grossRent_annual / purchasePrice × 100
+  const grossYield = (grossRentAnnual / purchasePrice) * 100;
+
+  // Price per unit / sqft
+  const pricePerUnit =
+    inputs.units !== undefined && inputs.units > 0
+      ? purchasePrice / inputs.units
+      : null;
+  const pricePerSqft =
+    inputs.sqft !== undefined && inputs.sqft > 0
+      ? purchasePrice / inputs.sqft
+      : null;
+
+  // 50% rule deviation: (modeled opExAnnual − 0.5 × egiAnnual) / egiAnnual × 100
+  // Positive = more expensive than the 50% rule; negative = cheaper.
+  const fiftyPctRuleDeviation =
+    egiAnnual > 0 ? ((opExAnnual - 0.5 * egiAnnual) / egiAnnual) * 100 : null;
 
   return {
     loanAmount: loan.loanAmount,

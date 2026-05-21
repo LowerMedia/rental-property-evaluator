@@ -263,6 +263,79 @@ describe('1% rule', () => {
   });
 });
 
+// ─── New screener metrics (RPE-16) ───────────────────────────────────────────
+
+describe('new screener metrics', () => {
+  it('breakEvenOccupancy: (opEx + mortgage) / grossPotentialRent × 100', () => {
+    const res = calcScreener(refDeal());
+    // (760 + 899.33) / (1800 + 100) × 100 = 1659.33 / 1900 × 100 ≈ 87.33%
+    const expected = ((res.opExMonthly! + res.mortgagePayment!) / 1_900) * 100;
+    expect(r(res.breakEvenOccupancy!, 2)).toBe(r(expected, 2));
+  });
+
+  it('breakEvenOccupancy: cash buyer has no mortgage in the formula', () => {
+    const res = calcScreener(refDeal({ percentDown: 100 }));
+    const expected = (res.opExMonthly! / 1_900) * 100;
+    expect(r(res.breakEvenOccupancy!, 2)).toBe(r(expected, 2));
+  });
+
+  it('expenseRatio: opExAnnual / egiAnnual × 100', () => {
+    const res = calcScreener(refDeal());
+    expect(r(res.expenseRatio!, 4)).toBe(r((res.opExAnnual! / res.egiAnnual!) * 100, 4));
+  });
+
+  it('LTV: loanAmount / purchasePrice × 100', () => {
+    const res = calcScreener(refDeal());
+    // loan = 150k, price = 200k → 75%
+    expect(r(res.ltv!)).toBe(75.0);
+  });
+
+  it('LTV is 0 for cash purchase (100% down)', () => {
+    const res = calcScreener(refDeal({ percentDown: 100 }));
+    expect(res.ltv).toBe(0);
+  });
+
+  it('debtYield: NOI_annual / loanAmount × 100', () => {
+    const res = calcScreener(refDeal());
+    expect(r(res.debtYield!, 4)).toBe(r((res.noiAnnual! / res.loanAmount!) * 100, 4));
+  });
+
+  it('debtYield is null for cash purchase (no loan)', () => {
+    const res = calcScreener(refDeal({ percentDown: 100 }));
+    expect(res.debtYield).toBeNull();
+  });
+
+  it('grossYield: grossRent × 12 / purchasePrice × 100', () => {
+    // 1800 × 12 / 200000 × 100 = 10.8%
+    const res = calcScreener(refDeal());
+    expect(r(res.grossYield!)).toBe(10.8);
+  });
+
+  it('pricePerUnit: purchasePrice / units', () => {
+    const res = calcScreener(refDeal({ units: 4 }));
+    expect(res.pricePerUnit).toBe(50_000);
+  });
+
+  it('pricePerUnit is null when units not provided', () => {
+    expect(calcScreener(refDeal()).pricePerUnit).toBeNull();
+  });
+
+  it('pricePerSqft: purchasePrice / sqft', () => {
+    const res = calcScreener(refDeal({ sqft: 2_000 }));
+    expect(res.pricePerSqft).toBe(100);
+  });
+
+  it('pricePerSqft is null when sqft not provided', () => {
+    expect(calcScreener(refDeal()).pricePerSqft).toBeNull();
+  });
+
+  it('fiftyPctRuleDeviation: (opEx − 0.5×EGI) / EGI × 100', () => {
+    const res = calcScreener(refDeal());
+    const expected = ((res.opExAnnual! - 0.5 * res.egiAnnual!) / res.egiAnnual!) * 100;
+    expect(r(res.fiftyPctRuleDeviation!, 4)).toBe(r(expected, 4));
+  });
+});
+
 // ─── GRM (RPE-15 fix) ─────────────────────────────────────────────────────────
 
 describe('GRM', () => {
