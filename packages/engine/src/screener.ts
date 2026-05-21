@@ -152,9 +152,11 @@ export function calcScreener(inputs: DealInputs): ScreenerResults {
   // grossRent_monthly / purchasePrice × 100
   const onePercentRule = (grossRent / purchasePrice) * 100;
 
-  // ── GRM — implemented in RPE-15 (uses annual rent; old code used monthly) ─
-  // Stub: null until RPE-15 commit.
-  const grm: number | null = null;
+  // ── GRM: purchasePrice / grossRent_ANNUAL ─────────────────────────────────
+  // Fix (RPE-15): old code used monthly rent (Price / monthlyRent), off by 12×.
+  // Convention: GRM = Price / Annual Gross Rent. LOWER is better.
+  const grossRentAnnual = grossRent * 12;
+  const grm: number | null = grossRentAnnual > 0 ? purchasePrice / grossRentAnnual : null;
 
   // ── New screener metrics — implemented in RPE-16 ─────────────────────────
   const breakEvenOccupancy: number | null = null;

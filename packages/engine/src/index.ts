@@ -23,6 +23,8 @@ export type { AmortizationRow, AmortizationSchedule } from './finance';
 export { calcLoanAmount, calcLoan } from './loan';
 export type { LoanResult } from './loan';
 export { calcScreener } from './screener';
+export { SCREENER_METRIC_CONFIG } from './directions';
+export type { MetricDirection, MetricConfig } from './directions';
 
 import type { DealInputs, EvalOptions, Results } from './types';
 import { normalizeInputs } from './validate';

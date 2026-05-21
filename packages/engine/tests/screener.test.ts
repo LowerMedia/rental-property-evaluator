@@ -263,6 +263,28 @@ describe('1% rule', () => {
   });
 });
 
+// ─── GRM (RPE-15 fix) ─────────────────────────────────────────────────────────
+
+describe('GRM', () => {
+  it('uses ANNUAL rent: purchasePrice / (grossRent × 12)', () => {
+    // 200,000 / (1,800 × 12) = 200,000 / 21,600 ≈ 9.26
+    const res = calcScreener(refDeal());
+    expect(r(res.grm!, 2)).toBe(r(200_000 / (1_800 * 12), 2));
+    expect(r(res.grm!)).toBe(9.26);
+  });
+
+  it('old monthly-rent GRM would have been 9.26 × 12 = 111 — this confirms the fix', () => {
+    const res = calcScreener(refDeal());
+    // The wrong formula (price / monthly) would give ~111
+    expect(res.grm!).toBeLessThan(20); // correct annual-based GRM is < 20
+  });
+
+  it('null when grossRent is 0', () => {
+    const res = calcScreener(refDeal({ grossRent: 0 }));
+    expect(res.grm).toBeNull();
+  });
+});
+
 // ─── Edge cases ───────────────────────────────────────────────────────────────
 
 describe('edge cases', () => {
