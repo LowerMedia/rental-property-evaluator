@@ -321,6 +321,77 @@ describe('evaluate — proforma mode', () => {
   });
 });
 
+// ─── calcProjection — holdYears > loanTermYears ──────────────────────────────
+
+describe('calcProjection — holdYears exceeds loanTermYears', () => {
+  const inputs = normalizeInputs({
+    ...BASE,
+    loanTermYears: 3,
+    holdYears: 5,
+    rentGrowthPct: 0,
+    expenseGrowthPct: 0,
+    appreciationPct: 0,
+  });
+  const projection = calcProjection(inputs);
+
+  it('returns holdYears rows', () => {
+    expect(projection.length).toBe(5);
+  });
+
+  it('annualDebtService is non-zero during the loan term', () => {
+    expect(projection[0]!.annualDebtService).toBeGreaterThan(0);
+    expect(projection[2]!.annualDebtService).toBeGreaterThan(0);
+  });
+
+  it('annualDebtService is 0 for years beyond the loan term', () => {
+    expect(projection[3]!.annualDebtService).toBe(0); // Year 4
+    expect(projection[4]!.annualDebtService).toBe(0); // Year 5
+  });
+
+  it('loanBalance is 0 for years beyond the loan term', () => {
+    expect(projection[3]!.loanBalance).toBe(0);
+    expect(projection[4]!.loanBalance).toBe(0);
+  });
+
+  it('cashFlowAnnual equals noiAnnual for years beyond the loan term', () => {
+    expect(projection[3]!.cashFlowAnnual).toBeCloseTo(projection[3]!.noiAnnual, 6);
+    expect(projection[4]!.cashFlowAnnual).toBeCloseTo(projection[4]!.noiAnnual, 6);
+  });
+
+  it('cashFlowAnnual in post-payoff years exceeds loan-term years (no debt service)', () => {
+    expect(projection[3]!.cashFlowAnnual).toBeGreaterThan(projection[0]!.cashFlowAnnual);
+  });
+});
+
+// ─── calcProjection — growth rate guard (negative rates) ─────────────────────
+
+describe('calcProjection — growth rate clamping', () => {
+  it('extreme negative rentGrowthPct never produces negative grossRentAnnual', () => {
+    const inputs = normalizeInputs({ ...BASE, holdYears: 5, rentGrowthPct: -200 });
+    const projection = calcProjection(inputs);
+    for (const y of projection) {
+      expect(y.grossRentAnnual).toBeGreaterThanOrEqual(0);
+      expect(y.egiAnnual).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('extreme negative expenseGrowthPct never produces negative opExAnnual for fixed-expense component', () => {
+    const inputs = normalizeInputs({ ...BASE, holdYears: 3, expenseGrowthPct: -200 });
+    const projection = calcProjection(inputs);
+    for (const y of projection) {
+      expect(y.opExAnnual).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('extreme negative appreciationPct never produces negative propertyValue', () => {
+    const inputs = normalizeInputs({ ...BASE, holdYears: 5, appreciationPct: -200 });
+    const projection = calcProjection(inputs);
+    for (const y of projection) {
+      expect(y.propertyValue).toBeGreaterThanOrEqual(0);
+    }
+  });
+});
+
 // ─── other income growth ──────────────────────────────────────────────────────
 
 describe('calcProjection — other income grows with rent', () => {
