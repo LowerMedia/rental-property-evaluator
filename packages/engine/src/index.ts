@@ -42,7 +42,8 @@ import { calcProForma } from './proforma';
  * @param inputs  Raw deal inputs (NaN/out-of-range values are clamped internally).
  * @param opts    { mode: 'screener' (default) | 'proforma' }
  * @returns       ScreenerResults in screener mode; ProFormaResults in proforma mode.
- *                Every numeric field is `number | null` (null → "—").
+ *                ScreenerResults fields are `number | null` (null renders as "—").
+ *                ProjectionYear fields in ProFormaResults are plain `number` (never null).
  */
 export function evaluate(inputs: DealInputs, opts?: EvalOptions): Results {
   const mode = opts?.mode ?? 'screener';

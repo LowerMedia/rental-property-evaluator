@@ -1,5 +1,5 @@
 /**
- * Pro-forma mode entry point (RPE-E4).
+ * Pro-forma mode entry point (RPE-29).
  *
  * Bundles the screener snapshot with the multi-year projection.
  * IRR / NPV added in RPE-33; exit/sale modeling in RPE-34.

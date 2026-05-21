@@ -170,24 +170,24 @@ export interface ScreenerResults {
   fiftyPctRuleDeviation: number | null;
 }
 
-// ─── Pro-forma types (RPE-E4) ─────────────────────────────────────────────────
+// ─── Pro-forma types (RPE-29) ─────────────────────────────────────────────────
 
 /**
  * Single year in the multi-year hold projection (RPE-29).
  *
- * Year 1 = first full year of ownership at base rates (no growth applied yet).
- * Year 2 = Year 1 × growth factors, etc.
- *
- * Convention:
- *   - % of rent expenses (capEx, maint, mgmt, misc) grow with rent growth.
+ * All values are end-of-year figures. Conventions:
+ *   - Rent/expense growth: Year 1 = base rates (growth factor = (1+g)^0 = 1).
+ *     Compounding begins in Year 2 and beyond.
+ *   - Property value: end-of-Year-1 = purchasePrice × (1+a)^1 (first year of appreciation applied).
+ *   - Loan balance: remaining balance at the end of that calendar year.
+ *   - Debt service: 0 for years beyond the loan term (loan fully paid off) and for cash purchases.
+ *   - % of rent expenses (capEx, maint, mgmt, misc) scale automatically with rent growth.
  *   - Fixed dollar expenses (taxes, insurance, HOA, other) grow at expenseGrowthPct.
- *   - Debt service is fixed (fixed-rate mortgage).
- *   - Property value compounds at appreciationPct applied to purchasePrice.
  */
 export interface ProjectionYear {
-  /** 1-indexed; Year 1 = base year, Year N = last year of hold. */
+  /** 1-indexed; Year 1 = base year (end-of-year-1 values), Year N = last year of hold. */
   year: number;
-  /** Gross potential rent for the year (grows at rentGrowthPct). */
+  /** Gross potential rent for the year (base in Year 1; grows at rentGrowthPct from Year 2). */
   grossRentAnnual: number;
   /** EGI = (grossRent + otherIncome) × (1 − vacancy%) for the year. */
   egiAnnual: number;
@@ -195,7 +195,7 @@ export interface ProjectionYear {
   opExAnnual: number;
   /** NOI = egiAnnual − opExAnnual. */
   noiAnnual: number;
-  /** Annual debt service (P&I × 12). Fixed throughout hold; 0 for cash purchases. */
+  /** Annual debt service (P&I × 12). Zero for years beyond the loan term or for cash purchases. */
   annualDebtService: number;
   /** Cash flow = noiAnnual − annualDebtService. */
   cashFlowAnnual: number;
