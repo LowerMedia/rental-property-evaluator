@@ -70,8 +70,9 @@ export function buildAmortizationYears(schedule: AmortizationSchedule): Amortiza
 }
 
 /**
- * Returns the year index (0-based) where principal paid first exceeds interest paid
- * within a single year. Returns -1 if the crossover never occurs (e.g. interest-only).
+ * Returns the year index (0-based) where principal paid first meets or exceeds
+ * interest paid within a single year. Returns -1 if the crossover never occurs
+ * (e.g. interest-only loans where principal never catches up).
  */
 export function findCrossoverYear(years: AmortizationYear[]): number {
   return years.findIndex((y) => y.principalPaid >= y.interestPaid);

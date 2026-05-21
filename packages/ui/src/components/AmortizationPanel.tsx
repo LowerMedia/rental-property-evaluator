@@ -34,8 +34,10 @@ function AmortizationChart({ years, crossoverIdx }: ChartProps) {
 
   const n = years.length;
   const barW = (CHART_W - BAR_GAP * (n - 1)) / n;
-  // All bars share the same total height (fixed-rate payment is constant).
-  const annualPayment = years[0]!.annualPayment;
+  // Scale against the maximum annual payment so each bar fills the chart height
+  // proportionally. Using per-bar max (rather than years[0]) correctly handles
+  // partial final years or any floating-point rounding in the amortization schedule.
+  const maxPayment = Math.max(...years.map((y) => y.annualPayment));
 
   return (
     <div className="w-full">
@@ -47,8 +49,9 @@ function AmortizationChart({ years, crossoverIdx }: ChartProps) {
       >
         {years.map((y, i) => {
           const x = i * (barW + BAR_GAP);
-          const interestH = (y.interestPaid / annualPayment) * CHART_H;
-          const principalH = (y.principalPaid / annualPayment) * CHART_H;
+          const denom = maxPayment > 0 ? maxPayment : 1;
+          const interestH = (y.interestPaid / denom) * CHART_H;
+          const principalH = (y.principalPaid / denom) * CHART_H;
           const isEven = i % 2 === 0;
 
           return (
