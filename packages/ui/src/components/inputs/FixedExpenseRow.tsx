@@ -26,6 +26,7 @@ export function FixedExpenseRow({
 }: FixedExpenseRowProps) {
   const amountId = useId();
   const periodId = useId();
+  const hintId = useId();
 
   const [focused, setFocused] = useState(false);
   const [raw, setRaw] = useState('');
@@ -65,6 +66,7 @@ export function FixedExpenseRow({
             inputMode="decimal"
             value={displayValue}
             placeholder="0"
+            aria-describedby={hint ? hintId : undefined}
             onFocus={handleFocus}
             onChange={(e) => setRaw(e.target.value)}
             onBlur={handleBlur}
@@ -86,7 +88,7 @@ export function FixedExpenseRow({
           onChange={onPeriodChange}
         />
       </div>
-      {hint && <p className="text-xs text-lo">{hint}</p>}
+      {hint && <p id={hintId} className="text-xs text-lo">{hint}</p>}
     </div>
   );
 }

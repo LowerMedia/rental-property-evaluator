@@ -35,6 +35,7 @@ export function PercentInput({
 }: PercentInputProps) {
   const autoId = useId();
   const id = idProp ?? autoId;
+  const hintId = useId();
 
   const [focused, setFocused] = useState(false);
   const [raw, setRaw] = useState('');
@@ -69,6 +70,7 @@ export function PercentInput({
           type="text"
           inputMode="decimal"
           value={displayValue}
+          aria-describedby={hint ? hintId : undefined}
           onFocus={handleFocus}
           onChange={(e) => setRaw(e.target.value)}
           onBlur={handleBlur}
@@ -87,7 +89,7 @@ export function PercentInput({
           %
         </span>
       </div>
-      {hint && <p className="text-xs text-lo">{hint}</p>}
+      {hint && <p id={hintId} className="text-xs text-lo">{hint}</p>}
     </div>
   );
 }

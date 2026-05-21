@@ -259,7 +259,12 @@ export function Evaluator() {
   const results = useEvaluate(state);
 
   return (
-    <div className="min-h-dvh bg-base text-hi flex flex-col">
+    /*
+     * `h-dvh` + `min-h-0` on the flex-1 child creates a fixed viewport-height
+     * layout on desktop so the two panels scroll independently.
+     * On mobile the panels stack vertically and the page scrolls normally.
+     */
+    <div className="h-dvh bg-base text-hi flex flex-col">
       {/* ── Skip navigation ──────────────────────────────────────────────── */}
       <a
         href="#results"
@@ -269,7 +274,7 @@ export function Evaluator() {
       </a>
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-border bg-base/90 px-5 py-3 backdrop-blur-sm">
+      <header className="shrink-0 flex items-center justify-between gap-4 border-b border-border bg-base px-5 py-3">
         <div className="flex items-baseline gap-3">
           <h1 className="font-display text-xl tracking-wide text-hi">
             Rental Property Evaluator
@@ -291,7 +296,7 @@ export function Evaluator() {
       </header>
 
       {/* ── Body ─────────────────────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col lg:grid lg:grid-cols-[380px_1fr] overflow-hidden">
+      <main className="flex-1 min-h-0 flex flex-col lg:grid lg:grid-cols-[380px_1fr]">
         {/* Left — inputs */}
         <aside
           aria-label="Deal inputs"
@@ -300,15 +305,17 @@ export function Evaluator() {
           <DealInputsForm state={state} dispatch={dispatch} />
         </aside>
 
-        {/* Right — results */}
+        {/* Right — results (aria-live so screen readers announce re-evaluations) */}
         <section
           id="results"
           aria-label="Evaluation results"
+          aria-live="polite"
+          aria-atomic="false"
           className="overflow-y-auto p-5"
         >
           <ResultsPanel results={results} />
         </section>
-      </div>
+      </main>
     </div>
   );
 }

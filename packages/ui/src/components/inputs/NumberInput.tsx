@@ -34,6 +34,7 @@ export function NumberInput({
 }: NumberInputProps) {
   const autoId = useId();
   const id = idProp ?? autoId;
+  const hintId = useId();
 
   const [focused, setFocused] = useState(false);
   const [raw, setRaw] = useState('');
@@ -63,6 +64,7 @@ export function NumberInput({
           type="text"
           inputMode="numeric"
           value={displayValue}
+          aria-describedby={hint ? hintId : undefined}
           onFocus={handleFocus}
           onChange={(e) => setRaw(e.target.value)}
           onBlur={handleBlur}
@@ -84,7 +86,7 @@ export function NumberInput({
           </span>
         )}
       </div>
-      {hint && <p className="text-xs text-lo">{hint}</p>}
+      {hint && <p id={hintId} className="text-xs text-lo">{hint}</p>}
     </div>
   );
 }
