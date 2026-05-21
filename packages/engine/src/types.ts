@@ -212,6 +212,35 @@ export interface ProjectionYear {
   propertyValue: number;
   /** Equity = propertyValue − loanBalance. */
   equity: number;
+
+  // ── Tax / depreciation (RPE-32) ────────────────────────────────────────────
+  /**
+   * Annual straight-line depreciation: (purchasePrice − landValue) / 27.5.
+   * Constant across all years. Zero when landValue ≥ purchasePrice or inputs omitted.
+   */
+  depreciationAnnual: number;
+  /**
+   * Interest portion of debt service paid this year (sum of monthly amortization rows).
+   * Zero for cash purchases or for years after the loan is paid off.
+   */
+  interestPaid: number;
+  /**
+   * Simplified taxable income from property = noiAnnual − interestPaid − depreciationAnnual.
+   * Negative → "paper loss" that may shelter other income (subject to passive-activity rules
+   * outside this model). Positive → taxable rental income.
+   */
+  taxableIncome: number;
+  /**
+   * Tax savings from paper losses = max(0, −taxableIncome) × marginalTaxPct / 100.
+   * Zero when taxableIncome ≥ 0 or marginalTaxPct is not set.
+   * Simplified — does not apply the $25,000 passive-activity loss allowance or phase-outs.
+   */
+  taxSavings: number;
+  /**
+   * After-tax cash flow = cashFlowAnnual + taxSavings.
+   * Reflects the tax benefit of depreciation / interest deductions against cash position.
+   */
+  cashFlowAfterTax: number;
 }
 
 /**
