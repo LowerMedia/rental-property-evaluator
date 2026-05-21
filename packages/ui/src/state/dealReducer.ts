@@ -13,7 +13,8 @@ export type DealAction =
       amount: number;
       period: ExpenseInput['period'];
     }
-  | { type: 'RESET' };
+  | { type: 'RESET' }
+  | { type: 'LOAD'; inputs: DealInputs };
 
 // ─── Reducer ─────────────────────────────────────────────────────────────────
 
@@ -45,6 +46,9 @@ export function dealReducer(state: DealInputs, action: DealAction): DealInputs {
 
     case 'RESET':
       return { ...DEFAULT_INPUTS };
+
+    case 'LOAD':
+      return { ...action.inputs };
 
     default:
       return state;
