@@ -30,11 +30,14 @@ function toMonthlyAmount(e: { amount: number; period: 'monthly' | 'annual' }): n
 }
 
 /**
- * Compound a growth rate for `n` periods, clamped to ≥ 0.
- * Prevents negative income/expense values when growth rates below −100% are passed.
+ * Compound a growth rate for `n` periods, monotonically clamped to ≥ 0.
+ *
+ * The base multiplier `(1 + pct/100)` is clamped to 0 before exponentiation so
+ * that extreme negative rates (pct ≤ −100) always produce 0, not the oscillating
+ * positive values that `Math.pow(negative, even)` would otherwise return.
  */
 function growthFactor(pct: number, n: number): number {
-  return Math.max(0, Math.pow(1 + pct / 100, n));
+  return Math.pow(Math.max(0, 1 + pct / 100), n);
 }
 
 // ─── Main projection entry point ──────────────────────────────────────────────
@@ -45,7 +48,10 @@ function growthFactor(pct: number, n: number): number {
  * Returns an empty array when `holdYears` is absent, zero, or negative.
  */
 export function calcProjection(inputs: DealInputs): ProjectionYear[] {
-  const holdYears = inputs.holdYears ?? 0;
+  // Floor to whole years — fractional hold/term values are meaningless for annual rows,
+  // and fractional loanTermYears would cause ambiguous month-index lookups.
+  const holdYears = Math.floor(inputs.holdYears ?? 0);
+  const loanTermYears = Math.floor(inputs.loanTermYears);
   if (holdYears <= 0) return [];
 
   const {
@@ -62,12 +68,14 @@ export function calcProjection(inputs: DealInputs): ProjectionYear[] {
   const capExInNOI = inputs.capExInNOI ?? true;
 
   // ── Loan primitives (single amortize call) ────────────────────────────────
+  // Use floored loanTermYears so the amortization schedule and debt-service guard
+  // are consistent with the per-year loop index comparisons.
   const loanAmount = calcLoanAmount(inputs);
   const monthlyPayment = loanAmount > 0
-    ? pmt(loanAmount, inputs.interestRate, inputs.loanTermYears)
+    ? pmt(loanAmount, inputs.interestRate, loanTermYears)
     : null;
   const baseAnnualDebtService = monthlyPayment !== null ? monthlyPayment * 12 : 0;
-  const schedule = amortize(loanAmount, inputs.interestRate, inputs.loanTermYears);
+  const schedule = amortize(loanAmount, inputs.interestRate, loanTermYears);
 
   // ── Fixed expense base (monthly dollars) ─────────────────────────────────
   // These components grow at expenseGrowthPct (tax assessments, insurance, HOA, other).
@@ -109,7 +117,7 @@ export function calcProjection(inputs: DealInputs): ProjectionYear[] {
     const opExAnnual = (pctOpExMonthly + fixedOpExMonthly) * 12;
 
     // ── Debt service: zero once the loan term has passed ────────────────────
-    const annualDebtService = y <= inputs.loanTermYears ? baseAnnualDebtService : 0;
+    const annualDebtService = y <= loanTermYears ? baseAnnualDebtService : 0;
 
     // ── NOI & cash flow ──────────────────────────────────────────────────────
     const noiAnnual = egiAnnual - opExAnnual;

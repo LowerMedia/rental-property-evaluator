@@ -390,6 +390,42 @@ describe('calcProjection — growth rate clamping', () => {
       expect(y.propertyValue).toBeGreaterThanOrEqual(0);
     }
   });
+
+  it('even-exponent base-clamping: rentGrowthPct=-200 on even years does not oscillate back to positive', () => {
+    // Old result-clamp would allow (-1+(-2)/100)^2 = 1.0 (oscillation at year 2).
+    // Base-clamp ensures factor is always 0 when pct ≤ -100, regardless of exponent parity.
+    const inputs = normalizeInputs({ ...BASE, holdYears: 4, rentGrowthPct: -200 });
+    const projection = calcProjection(inputs);
+    // Year 1: factor = (1 + (-2))^0 = 1 (no growth yet applied), rent = base rent
+    // Year 2 onward: factor = max(0, -1)^n = 0 → rent collapses to 0
+    expect(projection[1]!.grossRentAnnual).toBe(0); // year 2
+    expect(projection[2]!.grossRentAnnual).toBe(0); // year 3
+    expect(projection[3]!.grossRentAnnual).toBe(0); // year 4
+  });
+});
+
+// ─── calcProjection — integer coercion (fractional holdYears / loanTermYears) ──
+
+describe('calcProjection — integer coercion', () => {
+  it('fractional holdYears is floored to whole years', () => {
+    const int5 = calcProjection(normalizeInputs({ ...BASE, holdYears: 5 }));
+    const frac5 = calcProjection(normalizeInputs({ ...BASE, holdYears: 5.9 }));
+    expect(frac5.length).toBe(5);
+    for (let i = 0; i < 5; i++) {
+      expect(frac5[i]!.cashFlowAnnual).toBeCloseTo(int5[i]!.cashFlowAnnual, 6);
+    }
+  });
+
+  it('fractional loanTermYears is floored (no ambiguous month-index offset)', () => {
+    const int10 = calcProjection(normalizeInputs({ ...BASE, holdYears: 5, loanTermYears: 10 }));
+    const frac10 = calcProjection(normalizeInputs({ ...BASE, holdYears: 5, loanTermYears: 10.5 }));
+    // Both should produce identical year rows (10.5 floored to 10)
+    expect(frac10.length).toBe(5);
+    for (let i = 0; i < 5; i++) {
+      expect(frac10[i]!.annualDebtService).toBeCloseTo(int10[i]!.annualDebtService, 2);
+      expect(frac10[i]!.loanBalance).toBeCloseTo(int10[i]!.loanBalance, 2);
+    }
+  });
 });
 
 // ─── other income growth ──────────────────────────────────────────────────────
