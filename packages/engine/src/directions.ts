@@ -5,8 +5,8 @@
  * component code.  Thresholds are conventional real-estate defaults; the UI may
  * expose them as configurable.
  *
- * direction 'higher' → value > threshold is passing (green)
- * direction 'lower'  → value < threshold is passing (green)
+ * direction 'higher' → value >= threshold is passing (green)
+ * direction 'lower'  → value <= threshold is passing (green)
  * direction 'none'   → informational only, no pass/fail colouring
  */
 

@@ -47,6 +47,22 @@ export {
   NULL_DISPLAY,
 } from './utils/format';
 
+export {
+  encodeInputs,
+  decodeInputs,
+  parseShareParam,
+  buildShareUrl,
+  SHARE_PARAM,
+} from './utils/shareUrl';
+
+export {
+  escapeCsvCell,
+  rowsToCsv,
+  buildCsvRows,
+  downloadCsv,
+  exportToCsv,
+} from './utils/exportCsv';
+
 // ── Input components ─────────────────────────────────────────────────────────
 export { CurrencyInput } from './components/inputs/CurrencyInput';
 export { PercentInput } from './components/inputs/PercentInput';

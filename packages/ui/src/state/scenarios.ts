@@ -22,8 +22,8 @@ export function generateScenarioId(): string {
 
 // ─── Factory ──────────────────────────────────────────────────────────────────
 
-export function createScenario(name: string, inputs: DealInputs = DEFAULT_INPUTS): Scenario {
-  return { id: generateScenarioId(), name, inputs };
+export function createScenario(name: string, inputs?: DealInputs): Scenario {
+  return { id: generateScenarioId(), name, inputs: inputs ?? structuredClone(DEFAULT_INPUTS) };
 }
 
 // ─── Pure state transformations ───────────────────────────────────────────────
@@ -40,7 +40,7 @@ export function addScenario(
   const n = scenarios.length + 1;
   return [
     ...scenarios,
-    createScenario(`Scenario ${n}`, baseInputs ?? { ...DEFAULT_INPUTS }),
+    createScenario(`Scenario ${n}`, baseInputs ?? structuredClone(DEFAULT_INPUTS)),
   ];
 }
 

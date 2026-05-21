@@ -1,11 +1,37 @@
 import type { DealExpenses, DealInputs, ExpenseInput } from '@rpe/engine';
 import { DEFAULT_INPUTS } from './defaultInputs';
 
+// ─── Narrowed field key unions ─────────────────────────────────────────────────
+
+/** All top-level DealInputs keys that hold a plain number (or undefined number). */
+type NumericDealKey =
+  | 'purchasePrice'
+  | 'percentDown'
+  | 'interestRate'
+  | 'loanTermYears'
+  | 'closingCosts'
+  | 'rehab'
+  | 'grossRent'
+  | 'otherIncome'
+  | 'vacancyPct'
+  | 'units'
+  | 'sqft'
+  | 'landValue'
+  | 'holdYears'
+  | 'rentGrowthPct'
+  | 'expenseGrowthPct'
+  | 'appreciationPct'
+  | 'sellingCostsPct'
+  | 'marginalTaxPct';
+
+/** All top-level DealInputs keys that hold a boolean (or undefined boolean). */
+type BooleanDealKey = 'rollClosingCostsIntoLoan' | 'capExInNOI';
+
 // ─── Actions ─────────────────────────────────────────────────────────────────
 
 export type DealAction =
-  | { type: 'SET_NUMBER'; field: keyof DealInputs; value: number }
-  | { type: 'SET_BOOL'; field: keyof DealInputs; value: boolean }
+  | { type: 'SET_NUMBER'; field: NumericDealKey; value: number }
+  | { type: 'SET_BOOL'; field: BooleanDealKey; value: boolean }
   | { type: 'SET_EXPENSE_PCT'; field: 'capExPct' | 'maintPct' | 'mgmtPct' | 'miscPct'; value: number }
   | {
       type: 'SET_EXPENSE_FIXED';
@@ -45,7 +71,7 @@ export function dealReducer(state: DealInputs, action: DealAction): DealInputs {
     }
 
     case 'RESET':
-      return { ...DEFAULT_INPUTS };
+      return structuredClone(DEFAULT_INPUTS);
 
     case 'LOAD':
       return { ...action.inputs };

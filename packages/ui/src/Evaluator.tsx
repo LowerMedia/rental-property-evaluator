@@ -1,8 +1,10 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { evaluate, SCREENER_METRIC_CONFIG } from '@rpe/engine';
-import type { ScreenerResults } from '@rpe/engine';
+import type { DealInputs, ScreenerResults } from '@rpe/engine';
 import { useSavedDeals } from './hooks/useSavedDeals';
 import { useScenarios } from './hooks/useScenarios';
+import { buildShareUrl } from './utils/shareUrl';
+import { exportToCsv } from './utils/exportCsv';
 import { DealInputsForm } from './components/inputs/DealInputsForm';
 import { SavedDealsPanel } from './components/SavedDealsPanel';
 import { ScenarioTabs } from './components/ScenarioTabs';
@@ -57,10 +59,14 @@ function thresholdNote(key: MetricKey, signal: ReturnType<typeof evalSignal>): s
   const cfg = SCREENER_METRIC_CONFIG[key];
   if (cfg.threshold === undefined) return null;
   const dir = cfg.direction === 'higher' ? '≥' : '≤';
+  const dec = cfg.decimals ?? 1;
+  const unit = cfg.unit ?? '';
   const val =
-    cfg.unit === '%' ? fmtPercent(cfg.threshold, cfg.decimals ?? 1)
-    : cfg.unit === '×' ? fmtMultiplier(cfg.threshold, cfg.decimals ?? 2)
-    : fmtNumber(cfg.threshold, cfg.decimals ?? 1);
+    unit === '%' ? fmtPercent(cfg.threshold, dec)
+    : unit === '×' ? fmtMultiplier(cfg.threshold, dec)
+    : unit === '$' || unit === '$/mo' || unit === '$/yr' || unit === '$/sqft'
+      ? fmtCurrency(cfg.threshold, dec > 0)
+    : fmtNumber(cfg.threshold, dec);
   return `needs ${dir} ${val}`;
 }
 
@@ -181,7 +187,6 @@ function ResultsPanel({ results }: { results: ScreenerResults }) {
         <MetricRow metricKey="loanAmount" result={results} />
         <MetricRow metricKey="mortgagePayment" result={results} label="P&I / mo" />
         <MetricRow metricKey="ltv" result={results} />
-        <MetricRow metricKey="dscr" result={results} />
         <MetricRow metricKey="debtYield" result={results} />
         <MetricRow metricKey="totalInterest" result={results} />
       </ResultGroup>
@@ -192,6 +197,41 @@ function ResultsPanel({ results }: { results: ScreenerResults }) {
         {results.pricePerSqft !== null && <MetricRow metricKey="pricePerSqft" result={results} />}
       </ResultGroup>
     </div>
+  );
+}
+
+// ─── Share button ─────────────────────────────────────────────────────────────
+
+function ShareButton({ inputs }: { inputs: DealInputs }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleShare = useCallback(async () => {
+    const url = buildShareUrl(inputs);
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      // Fallback: open prompt with URL for environments without clipboard API
+      window.prompt('Copy this link to share the current scenario:', url);
+      return;
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }, [inputs]);
+
+  return (
+    <button
+      type="button"
+      onClick={() => void handleShare()}
+      className="
+        rounded border border-border px-3 py-1.5
+        text-xs text-mid uppercase tracking-widest
+        hover:border-accent hover:text-accent
+        transition-colors
+      "
+      title="Copy a shareable link to the current scenario"
+    >
+      {copied ? 'Copied ✓' : 'Share'}
+    </button>
   );
 }
 
@@ -249,7 +289,7 @@ export function Evaluator() {
           </h1>
           <span className="hidden text-xs text-lo sm:inline">Screener</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="no-print flex items-center gap-2">
           <SavedDealsPanel
             currentInputs={activeInputs}
             deals={deals}
@@ -258,6 +298,33 @@ export function Evaluator() {
             onDelete={remove}
             onRename={rename}
           />
+          <ShareButton inputs={activeInputs} />
+          <button
+            type="button"
+            onClick={() => exportToCsv(scenarios, resultsList)}
+            className="
+              rounded border border-border px-3 py-1.5
+              text-xs text-mid uppercase tracking-widest
+              hover:border-accent hover:text-accent
+              transition-colors
+            "
+            title="Download results as CSV"
+          >
+            CSV
+          </button>
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="
+              rounded border border-border px-3 py-1.5
+              text-xs text-mid uppercase tracking-widest
+              hover:border-accent hover:text-accent
+              transition-colors
+            "
+            title="Print or save as PDF"
+          >
+            Print
+          </button>
           <button
             type="button"
             onClick={() => dispatchToActive({ type: 'RESET' })}
@@ -275,10 +342,10 @@ export function Evaluator() {
 
       {/* ── Body ── */}
       <main className="flex-1 min-h-0 flex flex-col lg:grid lg:grid-cols-[380px_1fr]">
-        {/* Left — inputs */}
+        {/* Left — inputs (hidden in print) */}
         <aside
           aria-label="Deal inputs"
-          className="flex flex-col overflow-hidden border-b border-border lg:border-b-0 lg:border-r lg:border-border"
+          className="no-print flex flex-col overflow-hidden border-b border-border lg:border-b-0 lg:border-r lg:border-border"
         >
           <ScenarioTabs
             scenarios={scenarios}
