@@ -11,13 +11,15 @@ import { FixedExpenseRow } from './FixedExpenseRow';
 interface DealInputsFormProps {
   state: DealInputs;
   dispatch: Dispatch<DealAction>;
+  /** When true, the Pro-Forma Settings section is rendered. */
+  proFormaMode?: boolean;
 }
 
 /**
  * Full deal-input form, grouped into labelled sections.
  * Each input dispatches a typed action to the parent reducer.
  */
-export function DealInputsForm({ state, dispatch }: DealInputsFormProps) {
+export function DealInputsForm({ state, dispatch, proFormaMode = false }: DealInputsFormProps) {
   const { expenses } = state;
 
   // ── Taxes helper — always present ──────────────────────────────────────────
@@ -214,6 +216,76 @@ export function DealInputsForm({ state, dispatch }: DealInputsFormProps) {
           hint="Leave 0 to hide price-per-sqft metric"
         />
       </InputSection>
+
+      {/* ── Pro-Forma Settings (shown in pro-forma mode only) ─────────────── */}
+      {proFormaMode && (
+        <InputSection title="Pro-Forma Settings">
+          <NumberInput
+            label="Hold Period"
+            value={state.holdYears ?? 5}
+            onChange={(v) => dispatch({ type: 'SET_NUMBER', field: 'holdYears', value: v })}
+            min={1}
+            max={50}
+            unit="yrs"
+            hint="Number of years to project"
+          />
+          <PercentInput
+            label="Rent Growth"
+            value={state.rentGrowthPct ?? 2}
+            onChange={(v) => dispatch({ type: 'SET_NUMBER', field: 'rentGrowthPct', value: v })}
+            min={-20}
+            max={20}
+            hint="Annual rent growth rate"
+          />
+          <PercentInput
+            label="Expense Growth"
+            value={state.expenseGrowthPct ?? 2}
+            onChange={(v) => dispatch({ type: 'SET_NUMBER', field: 'expenseGrowthPct', value: v })}
+            min={-20}
+            max={20}
+            hint="Annual growth for fixed expenses"
+          />
+          <PercentInput
+            label="Appreciation"
+            value={state.appreciationPct ?? 3}
+            onChange={(v) => dispatch({ type: 'SET_NUMBER', field: 'appreciationPct', value: v })}
+            min={-20}
+            max={20}
+            hint="Annual property value growth"
+          />
+          <PercentInput
+            label="Selling Costs"
+            value={state.sellingCostsPct ?? 6}
+            onChange={(v) => dispatch({ type: 'SET_NUMBER', field: 'sellingCostsPct', value: v })}
+            min={0}
+            max={20}
+            hint="Agent commission + closing costs at sale"
+          />
+          <CurrencyInput
+            label="Land Value"
+            value={state.landValue ?? 0}
+            onChange={(v) => dispatch({ type: 'SET_NUMBER', field: 'landValue', value: v })}
+            emptyZero
+            hint="Non-depreciable portion of purchase price"
+          />
+          <PercentInput
+            label="Marginal Tax Rate"
+            value={state.marginalTaxPct ?? 0}
+            onChange={(v) => dispatch({ type: 'SET_NUMBER', field: 'marginalTaxPct', value: v })}
+            min={0}
+            max={60}
+            hint="For after-tax cash flow (leave 0 to skip)"
+          />
+          <PercentInput
+            label="Discount Rate (NPV)"
+            value={state.discountRatePct ?? 0}
+            onChange={(v) => dispatch({ type: 'SET_NUMBER', field: 'discountRatePct', value: v })}
+            min={0}
+            max={50}
+            hint="Hurdle rate — leave 0 to skip NPV"
+          />
+        </InputSection>
+      )}
     </div>
   );
 }
