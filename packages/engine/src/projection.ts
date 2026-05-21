@@ -10,8 +10,12 @@
  *
  * Inputs MUST be pre-normalised via normalizeInputs() before calling calcProjection().
  *
- * End-of-year convention:
- *   - All ProjectionYear values are end-of-year figures.
+ * Row conventions:
+ *   - Annual period totals (flow values for that calendar year): grossRentAnnual,
+ *     egiAnnual, opExAnnual, noiAnnual, cashFlowAnnual, annualDebtService,
+ *     cumulativeCashFlow, and any tax/depreciation fields.
+ *   - End-of-year snapshots (point-in-time at year close): loanBalance,
+ *     propertyValue, equity.
  *   - Rent/expense growth: Year 1 = base rates (factor = (1+g)^0 = 1).
  *     Growth compounds in Year 2 and beyond.
  *   - Property value: end-of-Year-1 = purchasePrice × (1+a)^1 (first year of appreciation).
@@ -45,7 +49,11 @@ function growthFactor(pct: number, n: number): number {
 /**
  * Compute a year-by-year hold projection for a deal.
  *
- * Returns an empty array when `holdYears` is absent, zero, or negative.
+ * Returns an empty array when:
+ *   - `holdYears` is absent, zero, or negative, OR
+ *   - `loanAmount > 0` and `loanTermYears <= 0` (a financed deal with no loan term
+ *     would produce a null amortization schedule, causing loanBalance to be silently
+ *     zero and equity to be overstated).
  */
 export function calcProjection(inputs: DealInputs): ProjectionYear[] {
   // Floor to whole years — fractional hold/term values are meaningless for annual rows,

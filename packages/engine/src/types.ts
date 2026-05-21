@@ -175,7 +175,12 @@ export interface ScreenerResults {
 /**
  * Single year in the multi-year hold projection (RPE-29).
  *
- * All values are end-of-year figures. Conventions:
+ * Row conventions:
+ *   - Annual period totals (flow values for that calendar year): grossRentAnnual,
+ *     egiAnnual, opExAnnual, noiAnnual, cashFlowAnnual, annualDebtService,
+ *     cumulativeCashFlow, and any tax/depreciation fields.
+ *   - End-of-year snapshots (point-in-time at year close): loanBalance,
+ *     propertyValue, equity.
  *   - Rent/expense growth: Year 1 = base rates (growth factor = (1+g)^0 = 1).
  *     Compounding begins in Year 2 and beyond.
  *   - Property value: end-of-Year-1 = purchasePrice × (1+a)^1 (first year of appreciation applied).

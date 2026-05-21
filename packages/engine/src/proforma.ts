@@ -15,7 +15,9 @@ import type { DealInputs, ProFormaResults } from './types';
  * Compute pro-forma results: screener snapshot + multi-year hold projection.
  *
  * The screener results reflect Year-0 (acquisition-day) financials.
- * The projection array covers Years 1..holdYears (empty if holdYears is absent/0).
+ * The projection array covers Years 1..holdYears. Returns an empty projection when
+ * holdYears is absent/0 or purchasePrice ≤ 0 (the latter prevents internally
+ * inconsistent results where screener fields are null but projection rows are numeric).
  */
 export function calcProForma(inputs: DealInputs): ProFormaResults {
   const screener = calcScreener(inputs);
