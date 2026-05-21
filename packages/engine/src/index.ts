@@ -22,22 +22,30 @@ export { pmt, amortize } from './finance';
 export type { AmortizationRow, AmortizationSchedule } from './finance';
 export { calcLoanAmount, calcLoan } from './loan';
 export type { LoanResult } from './loan';
+export { calcScreener } from './screener';
 
 import type { DealInputs, EvalOptions, Results } from './types';
+import { normalizeInputs } from './validate';
+import { calcScreener } from './screener';
 
 /**
  * Evaluate a deal and return metrics.
  *
- * @param inputs  Raw deal inputs (will be normalised internally before calculation).
- * @param opts    { mode: 'screener' (default) | 'proforma' }
- * @returns       ScreenerResults (screener mode) or ProFormaResults (proforma mode).
- *                Every numeric field is `number | null` — null renders as "—" in UI.
+ * Normalises inputs before calculation so callers never need to pre-clean values.
  *
- * @throws        Until RPE-13 through RPE-16 are implemented.
+ * @param inputs  Raw deal inputs (NaN/out-of-range values are clamped internally).
+ * @param opts    { mode: 'screener' (default) | 'proforma' }
+ * @returns       ScreenerResults. Every numeric field is `number | null` (null → "—").
+ *                proforma mode is a stub until RPE-E4.
  */
-export function evaluate(_inputs: DealInputs, _opts?: EvalOptions): Results {
-  throw new Error(
-    'evaluate() not yet implemented — see RPE-13 (loan), RPE-14 (screener), ' +
-      'RPE-15 (GRM + direction), RPE-16 (new metrics).',
-  );
+export function evaluate(inputs: DealInputs, opts?: EvalOptions): Results {
+  const mode = opts?.mode ?? 'screener';
+  const normalized = normalizeInputs(inputs);
+
+  if (mode === 'screener') {
+    return calcScreener(normalized);
+  }
+
+  // proforma mode — RPE-E4
+  throw new Error('proforma mode not yet implemented — see RPE-E4.');
 }
