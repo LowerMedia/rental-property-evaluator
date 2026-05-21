@@ -6,6 +6,17 @@ export { Evaluator } from './Evaluator';
 
 // ── State ────────────────────────────────────────────────────────────────────
 export { dealReducer } from './state/dealReducer';
+export {
+  createScenario,
+  addScenario,
+  removeScenario,
+  renameScenario,
+  applyDealAction,
+  replaceInputs,
+  MIN_SCENARIOS,
+  MAX_SCENARIOS,
+} from './state/scenarios';
+export type { Scenario } from './state/scenarios';
 export { DEFAULT_INPUTS } from './state/defaultInputs';
 export type { DealAction } from './state/dealReducer';
 export {
@@ -22,6 +33,8 @@ export type { SavedDeal, SavedDealsStore } from './state/savedDealsSchema';
 export { useEvaluate } from './hooks/useEvaluate';
 export { useSavedDeals } from './hooks/useSavedDeals';
 export type { UseSavedDealsReturn } from './hooks/useSavedDeals';
+export { useScenarios } from './hooks/useScenarios';
+export type { UseScenariosReturn } from './hooks/useScenarios';
 
 // ── Utilities ────────────────────────────────────────────────────────────────
 export {
