@@ -144,7 +144,8 @@ describe('findCrossoverYear', () => {
 
   it('returns index 0 for a 0% interest loan (principal always ≥ interest)', () => {
     const s = amortize(10_000, 0, 5);
-    if (!s) return; // guard
+    expect(s).not.toBeNull();
+    if (!s) return; // narrow type for TS
     const years = buildAmortizationYears(s);
     expect(findCrossoverYear(years)).toBe(0);
   });
