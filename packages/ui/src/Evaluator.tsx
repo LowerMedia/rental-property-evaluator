@@ -1,8 +1,9 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { evaluate, SCREENER_METRIC_CONFIG } from '@rpe/engine';
-import type { ScreenerResults } from '@rpe/engine';
+import type { DealInputs, ScreenerResults } from '@rpe/engine';
 import { useSavedDeals } from './hooks/useSavedDeals';
 import { useScenarios } from './hooks/useScenarios';
+import { buildShareUrl } from './utils/shareUrl';
 import { DealInputsForm } from './components/inputs/DealInputsForm';
 import { SavedDealsPanel } from './components/SavedDealsPanel';
 import { ScenarioTabs } from './components/ScenarioTabs';
@@ -195,6 +196,41 @@ function ResultsPanel({ results }: { results: ScreenerResults }) {
   );
 }
 
+// ─── Share button ─────────────────────────────────────────────────────────────
+
+function ShareButton({ inputs }: { inputs: DealInputs }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleShare = useCallback(async () => {
+    const url = buildShareUrl(inputs);
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      // Fallback: open prompt with URL for environments without clipboard API
+      window.prompt('Copy this link to share the current scenario:', url);
+      return;
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }, [inputs]);
+
+  return (
+    <button
+      type="button"
+      onClick={() => void handleShare()}
+      className="
+        rounded border border-border px-3 py-1.5
+        text-xs text-mid uppercase tracking-widest
+        hover:border-accent hover:text-accent
+        transition-colors
+      "
+      title="Copy a shareable link to the current scenario"
+    >
+      {copied ? 'Copied ✓' : 'Share'}
+    </button>
+  );
+}
+
 // ─── Main Evaluator ───────────────────────────────────────────────────────────
 
 /**
@@ -258,6 +294,7 @@ export function Evaluator() {
             onDelete={remove}
             onRename={rename}
           />
+          <ShareButton inputs={activeInputs} />
           <button
             type="button"
             onClick={() => dispatchToActive({ type: 'RESET' })}

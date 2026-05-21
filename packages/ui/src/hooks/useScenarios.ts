@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import type { Dispatch } from 'react';
 import type { DealInputs } from '@rpe/engine';
 import type { DealAction } from '../state/dealReducer';
@@ -12,6 +12,7 @@ import {
   type Scenario,
 } from '../state/scenarios';
 import { DEFAULT_INPUTS } from '../state/defaultInputs';
+import { parseShareParam, SHARE_PARAM } from '../utils/shareUrl';
 
 // ─── Public interface ─────────────────────────────────────────────────────────
 
@@ -38,9 +39,21 @@ export interface UseScenariosReturn {
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useScenarios(): UseScenariosReturn {
-  const [scenarios, setScenarios] = useState<Scenario[]>(() => [
-    createScenario('Scenario 1', { ...DEFAULT_INPUTS }),
-  ]);
+  const [scenarios, setScenarios] = useState<Scenario[]>(() => {
+    const sharedInputs = parseShareParam();
+    return [createScenario('Scenario 1', sharedInputs ?? { ...DEFAULT_INPUTS })];
+  });
+
+  // After hydrating from the share param, clean it from the URL so bookmarks
+  // and back-navigation don't re-apply stale inputs.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.has(SHARE_PARAM)) {
+      url.searchParams.delete(SHARE_PARAM);
+      window.history.replaceState(null, '', url.toString());
+    }
+  }, []); // intentionally empty — run once on mount only
   const [activeIdx, setActiveIdxState] = useState(0);
 
   const setActiveIdx = useCallback((idx: number) => {

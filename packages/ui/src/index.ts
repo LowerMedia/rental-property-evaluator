@@ -47,6 +47,14 @@ export {
   NULL_DISPLAY,
 } from './utils/format';
 
+export {
+  encodeInputs,
+  decodeInputs,
+  parseShareParam,
+  buildShareUrl,
+  SHARE_PARAM,
+} from './utils/shareUrl';
+
 // ── Input components ─────────────────────────────────────────────────────────
 export { CurrencyInput } from './components/inputs/CurrencyInput';
 export { PercentInput } from './components/inputs/PercentInput';
