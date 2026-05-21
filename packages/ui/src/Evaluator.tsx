@@ -1,5 +1,5 @@
 import { useMemo, useState, useCallback } from 'react';
-import { evaluate, SCREENER_METRIC_CONFIG, calcLoanAmount } from '@rpe/engine';
+import { evaluate, SCREENER_METRIC_CONFIG, calcLoanAmount, normalizeInputs } from '@rpe/engine';
 import type { DealInputs, ScreenerResults } from '@rpe/engine';
 import { useSavedDeals } from './hooks/useSavedDeals';
 import { useScenarios } from './hooks/useScenarios';
@@ -268,6 +268,9 @@ export function Evaluator() {
   const activeResults = resultsList[activeIdx] ?? (evaluate(activeInputs) as ScreenerResults);
   const isComparing = scenarios.length > 1;
 
+  /** Normalize active inputs once; used by AmortizationPanel to avoid triple-calling normalizeInputs. */
+  const activeNormalized = useMemo(() => normalizeInputs(activeInputs), [activeInputs]);
+
   const handleLoadDeal = (deal: SavedDeal) => {
     replaceScenarioInputs(activeIdx, deal.inputs);
   };
@@ -375,9 +378,9 @@ export function Evaluator() {
             <div className="flex flex-col gap-4">
               <ResultsPanel results={activeResults} />
               <AmortizationPanel
-                loanAmount={calcLoanAmount(activeInputs)}
-                interestRate={activeInputs.interestRate}
-                loanTermYears={activeInputs.loanTermYears}
+                loanAmount={calcLoanAmount(activeNormalized)}
+                interestRate={activeNormalized.interestRate}
+                loanTermYears={activeNormalized.loanTermYears}
               />
             </div>
           )}

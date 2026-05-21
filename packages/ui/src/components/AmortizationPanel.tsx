@@ -5,7 +5,7 @@
  * The panel hides itself when loanAmount ≤ 0 (cash purchase).
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { amortize } from '@rpe/engine';
 import { buildAmortizationYears, findCrossoverYear } from '../utils/amortization';
 import { fmtCurrency } from '../utils/format';
@@ -131,6 +131,8 @@ interface TableProps {
 
 function AmortizationTable({ years }: TableProps) {
   const [page, setPage] = useState(0);
+  // Reset to first page whenever the schedule length changes (e.g. loan term edited).
+  useEffect(() => { setPage(0); }, [years.length]);
   const totalPages = Math.ceil(years.length / PAGE_SIZE);
   const slice = years.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
