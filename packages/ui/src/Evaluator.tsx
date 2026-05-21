@@ -59,10 +59,14 @@ function thresholdNote(key: MetricKey, signal: ReturnType<typeof evalSignal>): s
   const cfg = SCREENER_METRIC_CONFIG[key];
   if (cfg.threshold === undefined) return null;
   const dir = cfg.direction === 'higher' ? '≥' : '≤';
+  const dec = cfg.decimals ?? 1;
+  const unit = cfg.unit ?? '';
   const val =
-    cfg.unit === '%' ? fmtPercent(cfg.threshold, cfg.decimals ?? 1)
-    : cfg.unit === '×' ? fmtMultiplier(cfg.threshold, cfg.decimals ?? 2)
-    : fmtNumber(cfg.threshold, cfg.decimals ?? 1);
+    unit === '%' ? fmtPercent(cfg.threshold, dec)
+    : unit === '×' ? fmtMultiplier(cfg.threshold, dec)
+    : unit === '$' || unit === '$/mo' || unit === '$/yr' || unit === '$/sqft'
+      ? fmtCurrency(cfg.threshold, dec > 0)
+    : fmtNumber(cfg.threshold, dec);
   return `needs ${dir} ${val}`;
 }
 
@@ -183,7 +187,6 @@ function ResultsPanel({ results }: { results: ScreenerResults }) {
         <MetricRow metricKey="loanAmount" result={results} />
         <MetricRow metricKey="mortgagePayment" result={results} label="P&I / mo" />
         <MetricRow metricKey="ltv" result={results} />
-        <MetricRow metricKey="dscr" result={results} />
         <MetricRow metricKey="debtYield" result={results} />
         <MetricRow metricKey="totalInterest" result={results} />
       </ResultGroup>

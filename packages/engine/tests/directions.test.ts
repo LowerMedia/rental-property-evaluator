@@ -92,27 +92,44 @@ describe('metric directions', () => {
 
 // ─── Pass/fail logic ──────────────────────────────────────────────────────────
 
-/** Helper: apply config direction + threshold to a value to get pass/fail. */
+/**
+ * Helper: apply config direction + threshold to a value to get pass/fail.
+ * Thresholds are inclusive (>= for 'higher', <= for 'lower') to match
+ * the UI's evalSignal and the metric descriptions (e.g. "DSCR ≥ 1.25").
+ */
 function isPassing(key: keyof ScreenerResults, value: number | null): boolean | null {
   if (value === null) return null;
   const cfg = SCREENER_METRIC_CONFIG[key];
   if (cfg.direction === 'none' || cfg.threshold === undefined) return null;
-  return cfg.direction === 'higher' ? value > cfg.threshold : value < cfg.threshold;
+  return cfg.direction === 'higher' ? value >= cfg.threshold : value <= cfg.threshold;
 }
 
 describe('pass/fail evaluation', () => {
   it('DSCR 1.3 passes (> 1.25)', () => expect(isPassing('dscr', 1.3)).toBe(true));
+  it('DSCR 1.25 passes (at threshold — inclusive ≥)', () =>
+    expect(isPassing('dscr', 1.25)).toBe(true));
   it('DSCR 1.1 fails (< 1.25)', () => expect(isPassing('dscr', 1.1)).toBe(false));
   it('DSCR null → null (no value)', () => expect(isPassing('dscr', null)).toBeNull());
 
   it('GRM 9 passes (< 12)', () => expect(isPassing('grm', 9)).toBe(true));
+  it('GRM 12 passes (at threshold — inclusive ≤)', () =>
+    expect(isPassing('grm', 12)).toBe(true));
   it('GRM 15 fails (> 12)', () => expect(isPassing('grm', 15)).toBe(false));
 
   it('capRate 6 passes (> 5)', () => expect(isPassing('capRate', 6)).toBe(true));
+  it('capRate 5 passes (at threshold — inclusive ≥)', () =>
+    expect(isPassing('capRate', 5)).toBe(true));
   it('capRate 4 fails (< 5)', () => expect(isPassing('capRate', 4)).toBe(false));
 
   it('1% rule 1.1 passes', () => expect(isPassing('onePercentRule', 1.1)).toBe(true));
+  it('1% rule 1.0 passes (at threshold — inclusive ≥)', () =>
+    expect(isPassing('onePercentRule', 1.0)).toBe(true));
   it('1% rule 0.8 fails', () => expect(isPassing('onePercentRule', 0.8)).toBe(false));
+
+  it('LTV 75 passes (< 80)', () => expect(isPassing('ltv', 75)).toBe(true));
+  it('LTV 80 passes (at threshold — inclusive ≤)', () =>
+    expect(isPassing('ltv', 80)).toBe(true));
+  it('LTV 85 fails (> 80)', () => expect(isPassing('ltv', 85)).toBe(false));
 
   it('loanAmount has no pass/fail (direction=none)', () =>
     expect(isPassing('loanAmount', 100_000)).toBeNull());

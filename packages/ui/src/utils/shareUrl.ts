@@ -52,18 +52,19 @@ export function parseShareParam(search?: string): DealInputs | null {
 /**
  * Build a shareable URL for the given inputs.
  *
- * Accepts an optional `base` string (e.g. `window.location.origin + pathname`)
- * for testability.  Preserves any existing query params except `s`.
+ * Constructs from `base` (when provided — useful for tests) or from the current
+ * `window.location.href`.  Preserves any existing query params and overwrites
+ * any previous `?s=` value so the share param is never duplicated.
+ *
+ * Returns `''` if no URL can be constructed (e.g. SSR without `base`).
  */
 export function buildShareUrl(inputs: DealInputs, base?: string): string {
-  const origin =
-    base ??
-    (typeof window !== 'undefined'
-      ? `${window.location.origin}${window.location.pathname}`
-      : '');
-  const search =
-    typeof window !== 'undefined' ? window.location.search : '';
-  const params = new URLSearchParams(search);
-  params.set(SHARE_PARAM, encodeInputs(inputs));
-  return `${origin}?${params.toString()}`;
+  let url: URL;
+  try {
+    url = new URL(base ?? (typeof window !== 'undefined' ? window.location.href : ''));
+  } catch {
+    return '';
+  }
+  url.searchParams.set(SHARE_PARAM, encodeInputs(inputs));
+  return url.toString();
 }

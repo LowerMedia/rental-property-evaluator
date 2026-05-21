@@ -25,6 +25,21 @@ const usdCents = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 2,
 });
 
+// Cached plain-number formatters keyed by decimal count (shared by fmtPercent + fmtNumber)
+const decimalFormatters = new Map<number, Intl.NumberFormat>();
+
+function getDecimalFormatter(decimals: number): Intl.NumberFormat {
+  let fmt = decimalFormatters.get(decimals);
+  if (!fmt) {
+    fmt = new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    });
+    decimalFormatters.set(decimals, fmt);
+  }
+  return fmt;
+}
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
@@ -43,12 +58,7 @@ export function fmtCurrency(value: number | null, cents = false): string {
  */
 export function fmtPercent(value: number | null, decimals = 2): string {
   if (value === null) return NULL_DISPLAY;
-  return (
-    new Intl.NumberFormat('en-US', {
-      minimumFractionDigits: decimals,
-      maximumFractionDigits: decimals,
-    }).format(value) + '%'
-  );
+  return getDecimalFormatter(decimals).format(value) + '%';
 }
 
 /**
@@ -56,10 +66,7 @@ export function fmtPercent(value: number | null, decimals = 2): string {
  */
 export function fmtNumber(value: number | null, decimals = 2): string {
   if (value === null) return NULL_DISPLAY;
-  return new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  }).format(value);
+  return getDecimalFormatter(decimals).format(value);
 }
 
 /**

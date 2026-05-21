@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { SCREENER_METRIC_CONFIG } from '@rpe/engine';
 import type { ScreenerResults } from '@rpe/engine';
 import { fmtCurrency, fmtPercent, fmtNumber, fmtMultiplier, NULL_DISPLAY } from '../utils/format';
@@ -101,7 +102,7 @@ const GROUPS: { title: string; keys: MetricKey[] }[] = [
   },
   {
     title: 'Loan',
-    keys: ['loanAmount', 'mortgagePayment', 'ltv', 'dscr', 'debtYield', 'totalInterest'],
+    keys: ['loanAmount', 'mortgagePayment', 'ltv', 'debtYield', 'totalInterest'],
   },
   {
     title: 'Capital',
@@ -197,9 +198,9 @@ export function ComparisonPanel({ scenarios, resultsList }: ComparisonPanelProps
             if (visibleKeys.length === 0) return null;
 
             return (
-              <>
+              <Fragment key={title}>
                 {/* Section header */}
-                <tr key={`${title}-header`} className="border-b border-border">
+                <tr className="border-b border-border">
                   <td
                     colSpan={colCount + 1}
                     className="sticky left-0 bg-raised px-4 py-1.5"
@@ -276,7 +277,7 @@ export function ComparisonPanel({ scenarios, resultsList }: ComparisonPanelProps
                     </tr>
                   );
                 })}
-              </>
+              </Fragment>
             );
           })}
         </tbody>

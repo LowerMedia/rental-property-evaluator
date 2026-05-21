@@ -51,16 +51,24 @@ export function ScenarioTabs({
   const canRemove = scenarios.length > MIN_SCENARIOS;
 
   return (
-    <div className="flex items-end gap-0 border-b border-border overflow-x-auto shrink-0">
+    <div
+      role="tablist"
+      aria-label="Scenarios"
+      className="flex items-end gap-0 border-b border-border overflow-x-auto shrink-0"
+    >
       {scenarios.map((scenario, idx) => {
         const isActive = idx === activeIdx;
         return (
-          <div
+          <button
             key={scenario.id}
+            type="button"
+            role="tab"
+            aria-selected={isActive}
+            id={`scenario-tab-${idx}`}
             className={`
               group relative flex items-center gap-1.5 px-3 py-2 shrink-0
-              border-r border-border cursor-pointer select-none
-              transition-colors
+              border-r border-border select-none
+              transition-colors text-left
               ${isActive
                 ? 'bg-surface border-b-2 border-b-accent -mb-px'
                 : 'bg-base hover:bg-raised border-b border-b-border'
@@ -98,14 +106,22 @@ export function ScenarioTabs({
 
             {/* Remove button — visible on hover of active tab, always shown when >1 */}
             {canRemove && renamingIdx !== idx && (
-              <button
-                type="button"
+              <span
+                role="button"
+                tabIndex={0}
                 onClick={(e) => {
                   e.stopPropagation();
                   onRemove(idx);
                 }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onRemove(idx);
+                  }
+                }}
                 className={`
-                  rounded p-0.5 transition-colors shrink-0
+                  rounded p-0.5 transition-colors shrink-0 cursor-pointer
                   ${isActive
                     ? 'text-lo hover:text-fail opacity-100'
                     : 'text-transparent group-hover:text-lo hover:!text-fail opacity-0 group-hover:opacity-100'
@@ -117,9 +133,9 @@ export function ScenarioTabs({
                 <svg width="8" height="8" viewBox="0 0 8 8" fill="none" aria-hidden="true">
                   <path d="M1 1l6 6M7 1L1 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                 </svg>
-              </button>
+              </span>
             )}
-          </div>
+          </button>
         );
       })}
 

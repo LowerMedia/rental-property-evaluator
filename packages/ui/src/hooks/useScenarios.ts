@@ -41,8 +41,22 @@ export interface UseScenariosReturn {
 export function useScenarios(): UseScenariosReturn {
   const [scenarios, setScenarios] = useState<Scenario[]>(() => {
     const sharedInputs = parseShareParam();
-    return [createScenario('Scenario 1', sharedInputs ?? { ...DEFAULT_INPUTS })];
+    // Merge shared payload with DEFAULT_INPUTS so any missing required fields
+    // fall back to safe defaults rather than producing undefined values.
+    const initialInputs = sharedInputs
+      ? {
+          ...DEFAULT_INPUTS,
+          ...sharedInputs,
+          expenses: {
+            ...DEFAULT_INPUTS.expenses,
+            ...(sharedInputs.expenses ?? {}),
+          },
+        }
+      : structuredClone(DEFAULT_INPUTS);
+    return [createScenario('Scenario 1', initialInputs)];
   });
+
+  const [activeIdx, setActiveIdxState] = useState(0);
 
   // After hydrating from the share param, clean it from the URL so bookmarks
   // and back-navigation don't re-apply stale inputs.
@@ -54,7 +68,6 @@ export function useScenarios(): UseScenariosReturn {
       window.history.replaceState(null, '', url.toString());
     }
   }, []); // intentionally empty — run once on mount only
-  const [activeIdx, setActiveIdxState] = useState(0);
 
   const setActiveIdx = useCallback((idx: number) => {
     setActiveIdxState(idx);
@@ -73,13 +86,11 @@ export function useScenarios(): UseScenariosReturn {
 
   const handleAddScenario = useCallback(() => {
     setScenarios((prev) => {
-      const activeInputs = prev[activeIdx]?.inputs ?? { ...DEFAULT_INPUTS };
-      return addScenario(prev, { ...activeInputs });
-    });
-    // Activate the newly added scenario
-    setScenarios((prev) => {
-      setActiveIdxState(prev.length - 1);
-      return prev;
+      const base = prev[activeIdx]?.inputs ?? structuredClone(DEFAULT_INPUTS);
+      const next = addScenario(prev, base);
+      // Activate the newly appended scenario within the same state update
+      setActiveIdxState(next.length - 1);
+      return next;
     });
   }, [activeIdx]);
 
@@ -103,7 +114,7 @@ export function useScenarios(): UseScenariosReturn {
   }, []);
 
   // Safe access — always defined since we start with at least one scenario
-  const activeInputs = scenarios[activeIdx]?.inputs ?? { ...DEFAULT_INPUTS };
+  const activeInputs = scenarios[activeIdx]?.inputs ?? structuredClone(DEFAULT_INPUTS);
 
   return {
     scenarios,

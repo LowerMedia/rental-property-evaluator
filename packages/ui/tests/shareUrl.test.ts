@@ -122,15 +122,20 @@ describe('buildShareUrl', () => {
     expect(url.startsWith(BASE)).toBe(true);
   });
 
-  it('only adds one share param even when called multiple times', () => {
-    const url = buildShareUrl(DEFAULT_INPUTS, BASE);
-    const search1 = '?' + url.split('?')[1];
-    // Build again using the already-parameterised URL as base (simulating a re-share)
-    // This tests that the param is overwritten, not duplicated
-    const url2 = buildShareUrl(DEFAULT_INPUTS, BASE);
-    const occurrences = (url2.match(new RegExp(`\\b${SHARE_PARAM}=`, 'g')) ?? []).length;
+  it('overwrites an existing ?s= param without duplicating it', () => {
+    // First share URL already contains ?s=...
+    const url1 = buildShareUrl(DEFAULT_INPUTS, BASE);
+    // Re-sharing from the already-parameterised URL should overwrite, not append
+    const url2 = buildShareUrl(DEFAULT_INPUTS, url1);
+    const occurrences = (url2.match(new RegExp(`[?&]${SHARE_PARAM}=`, 'g')) ?? []).length;
     expect(occurrences).toBe(1);
-    // Suppress unused-variable warning from the intermediate variable
-    void search1;
+  });
+
+  it('preserves unrelated query params when re-sharing', () => {
+    const baseWithExtra = `${BASE}?utm_source=email&ref=1`;
+    const url = buildShareUrl(DEFAULT_INPUTS, baseWithExtra);
+    expect(url).toContain('utm_source=email');
+    expect(url).toContain('ref=1');
+    expect(url).toContain(`${SHARE_PARAM}=`);
   });
 });
