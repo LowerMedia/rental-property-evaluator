@@ -848,12 +848,107 @@ describe('calcProForma — IRR / NPV / equityMultiple (RPE-33)', () => {
     expect(result.equityMultiple).toBeNull();
   });
 
-  it('equityMultiple = (totalCashFlow + terminalEquity) / totalCashInvested', () => {
+  it('equityMultiple = (totalCashFlow + netSaleProceeds) / totalCashInvested', () => {
+    // sellingCostsPct not set → netSaleProceeds = equity (selling costs = 0)
     const result = evaluate(inputs, { mode: 'proforma' }) as import('../src/types').ProFormaResults;
     const { projection, screener } = result;
-    const lastYear = projection[projection.length - 1]!;
     const totalCF = projection.reduce((s, y) => s + y.cashFlowAnnual, 0);
-    const expected = (totalCF + lastYear.equity) / screener.totalCashInvested!;
+    const expected = (totalCF + result.netSaleProceeds!) / screener.totalCashInvested!;
     expect(result.equityMultiple!).toBeCloseTo(expected, 6);
+  });
+});
+
+// ─── RPE-34: exit / sale modeling ────────────────────────────────────────────
+
+describe('calcProForma — exit/sale modeling (RPE-34)', () => {
+  const baseInputs = normalizeInputs({
+    ...BASE,
+    holdYears: 5,
+    appreciationPct: 3,
+    rentGrowthPct: 0,
+    expenseGrowthPct: 0,
+    discountRatePct: 10,
+  });
+
+  const withSelling = normalizeInputs({
+    ...BASE,
+    holdYears: 5,
+    appreciationPct: 3,
+    rentGrowthPct: 0,
+    expenseGrowthPct: 0,
+    discountRatePct: 10,
+    sellingCostsPct: 6,
+  });
+
+  it('salePrice = lastYear.propertyValue', () => {
+    const result = evaluate(baseInputs, { mode: 'proforma' }) as import('../src/types').ProFormaResults;
+    const lastYear = result.projection[result.projection.length - 1]!;
+    expect(result.salePrice).toBeCloseTo(lastYear.propertyValue, 6);
+  });
+
+  it('sellingCosts = 0 when sellingCostsPct is absent', () => {
+    const result = evaluate(baseInputs, { mode: 'proforma' }) as import('../src/types').ProFormaResults;
+    expect(result.sellingCosts).toBeCloseTo(0, 6);
+  });
+
+  it('sellingCosts = salePrice × sellingCostsPct / 100', () => {
+    const result = evaluate(withSelling, { mode: 'proforma' }) as import('../src/types').ProFormaResults;
+    expect(result.sellingCosts).toBeCloseTo(result.salePrice! * 0.06, 6);
+  });
+
+  it('netSaleProceeds = salePrice − sellingCosts − loanBalance', () => {
+    const result = evaluate(withSelling, { mode: 'proforma' }) as import('../src/types').ProFormaResults;
+    const lastYear = result.projection[result.projection.length - 1]!;
+    const expected = result.salePrice! - result.sellingCosts! - lastYear.loanBalance;
+    expect(result.netSaleProceeds).toBeCloseTo(expected, 6);
+  });
+
+  it('netSaleProceeds = equity when sellingCostsPct is 0', () => {
+    const result = evaluate(baseInputs, { mode: 'proforma' }) as import('../src/types').ProFormaResults;
+    const lastYear = result.projection[result.projection.length - 1]!;
+    expect(result.netSaleProceeds).toBeCloseTo(lastYear.equity, 6);
+  });
+
+  it('netSaleProceeds < equity when sellingCostsPct > 0', () => {
+    const withCosts = evaluate(withSelling, { mode: 'proforma' }) as import('../src/types').ProFormaResults;
+    const noCosts = evaluate(baseInputs, { mode: 'proforma' }) as import('../src/types').ProFormaResults;
+    expect(withCosts.netSaleProceeds!).toBeLessThan(noCosts.netSaleProceeds!);
+  });
+
+  it('totalProfit = Σ cashFlowAnnual + netSaleProceeds − totalCashInvested', () => {
+    const result = evaluate(withSelling, { mode: 'proforma' }) as import('../src/types').ProFormaResults;
+    const cumulativeCF = result.projection.reduce((s, y) => s + y.cashFlowAnnual, 0);
+    const expected = cumulativeCF + result.netSaleProceeds! - result.screener.totalCashInvested!;
+    expect(result.totalProfit).toBeCloseTo(expected, 6);
+  });
+
+  it('irr is lower when sellingCostsPct > 0 (selling costs reduce terminal value)', () => {
+    const withCosts = evaluate(withSelling, { mode: 'proforma' }) as import('../src/types').ProFormaResults;
+    const noCosts = evaluate(baseInputs, { mode: 'proforma' }) as import('../src/types').ProFormaResults;
+    expect(withCosts.irr!).toBeLessThan(noCosts.irr!);
+  });
+
+  it('equityMultiple is lower when sellingCostsPct > 0', () => {
+    const withCosts = evaluate(withSelling, { mode: 'proforma' }) as import('../src/types').ProFormaResults;
+    const noCosts = evaluate(baseInputs, { mode: 'proforma' }) as import('../src/types').ProFormaResults;
+    expect(withCosts.equityMultiple!).toBeLessThan(noCosts.equityMultiple!);
+  });
+
+  it('salePrice, sellingCosts, netSaleProceeds, totalProfit are null when projection is empty', () => {
+    const noHold = normalizeInputs({ ...BASE });
+    const result = evaluate(noHold, { mode: 'proforma' }) as import('../src/types').ProFormaResults;
+    expect(result.salePrice).toBeNull();
+    expect(result.sellingCosts).toBeNull();
+    expect(result.netSaleProceeds).toBeNull();
+    expect(result.totalProfit).toBeNull();
+  });
+
+  it('all exit fields are null when purchasePrice = 0', () => {
+    const zeroPP = normalizeInputs({ ...BASE, purchasePrice: 0, holdYears: 5 });
+    const result = evaluate(zeroPP, { mode: 'proforma' }) as import('../src/types').ProFormaResults;
+    expect(result.salePrice).toBeNull();
+    expect(result.sellingCosts).toBeNull();
+    expect(result.netSaleProceeds).toBeNull();
+    expect(result.totalProfit).toBeNull();
   });
 });

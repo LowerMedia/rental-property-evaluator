@@ -252,18 +252,40 @@ export interface ProjectionYear {
 
 /**
  * Pro-forma results — screener snapshot + multi-year projection + hold-period summary.
- * Exit modeling (selling costs, capital gains, net proceeds) added in RPE-34.
  */
 export interface ProFormaResults {
   screener: ScreenerResults;
   /** Year-by-year projections. Length = holdYears (empty array if holdYears is absent/0). */
   projection: ProjectionYear[];
 
-  // ── Hold-period summary (RPE-33) ──────────────────────────────────────────
+  // ── Exit / sale modeling (RPE-34) ─────────────────────────────────────────
+  /**
+   * Estimated gross sale price at end of hold = lastYear.propertyValue.
+   * Null when projection is empty.
+   */
+  salePrice: number | null;
+  /**
+   * Total selling costs = salePrice × sellingCostsPct / 100.
+   * Zero when sellingCostsPct is absent or 0. Null when projection is empty.
+   */
+  sellingCosts: number | null;
+  /**
+   * Net sale proceeds = salePrice − sellingCosts − loanBalance at end of hold.
+   * This is the cash the investor walks away with after paying the agent, closing
+   * costs, and retiring the remaining mortgage. Null when projection is empty.
+   */
+  netSaleProceeds: number | null;
+  /**
+   * Total profit = Σ cashFlowAnnual (all projection years) + netSaleProceeds − totalCashInvested.
+   * The all-in dollar gain from the investment. Null when projection is empty or
+   * totalCashInvested is null/0.
+   */
+  totalProfit: number | null;
+
+  // ── Hold-period summary (RPE-33) — IRR/NPV use netSaleProceeds as terminal value ──
   /**
    * Annualized IRR in percent (e.g. 12.5 = 12.5 %).
-   * Cash flows: [−totalCashInvested, CF₁, CF₂, …, CF_N + terminalEquity].
-   * terminalEquity = propertyValue − loanBalance at the end of holdYears.
+   * Cash flows: [−totalCashInvested, CF₁, CF₂, …, CF_N + netSaleProceeds].
    * Null if projection is empty or IRR fails to converge.
    */
   irr: number | null;
@@ -273,8 +295,8 @@ export interface ProFormaResults {
    */
   npv: number | null;
   /**
-   * Equity Multiple = (cumulative cash flow over holdYears + terminal equity) / totalCashInvested.
-   * Represents how many times the investor's capital was returned.
+   * Equity Multiple = (Σ cashFlowAnnual + netSaleProceeds) / totalCashInvested.
+   * Represents how many times the investor's capital was returned (including sale).
    * Null when projection is empty or totalCashInvested is 0.
    */
   equityMultiple: number | null;
