@@ -4,8 +4,11 @@ import type { ScreenerResults } from '@rpe/engine';
 import { dealReducer } from './state/dealReducer';
 import { DEFAULT_INPUTS } from './state/defaultInputs';
 import { useEvaluate } from './hooks/useEvaluate';
+import { useSavedDeals } from './hooks/useSavedDeals';
 import { DealInputsForm } from './components/inputs/DealInputsForm';
+import { SavedDealsPanel } from './components/SavedDealsPanel';
 import { fmtCurrency, fmtPercent, fmtNumber, fmtMultiplier, NULL_DISPLAY } from './utils/format';
+import type { SavedDeal } from './state/savedDealsSchema';
 
 // ─── Metric helpers ───────────────────────────────────────────────────────────
 
@@ -257,6 +260,11 @@ function ResultsPanel({ results }: ResultsPanelProps) {
 export function Evaluator() {
   const [state, dispatch] = useReducer(dealReducer, DEFAULT_INPUTS);
   const results = useEvaluate(state);
+  const { deals, save, rename, remove } = useSavedDeals();
+
+  const handleLoadDeal = (deal: SavedDeal) => {
+    dispatch({ type: 'LOAD', inputs: deal.inputs });
+  };
 
   return (
     /*
@@ -281,18 +289,28 @@ export function Evaluator() {
           </h1>
           <span className="hidden text-xs text-lo sm:inline">Screener</span>
         </div>
-        <button
-          type="button"
-          onClick={() => dispatch({ type: 'RESET' })}
-          className="
-            rounded border border-border px-3 py-1.5
-            text-xs text-mid uppercase tracking-widest
-            hover:border-accent hover:text-accent
-            transition-colors
-          "
-        >
-          Reset
-        </button>
+        <div className="flex items-center gap-2">
+          <SavedDealsPanel
+            currentInputs={state}
+            deals={deals}
+            onSave={(name) => save(name, state)}
+            onLoad={handleLoadDeal}
+            onDelete={remove}
+            onRename={rename}
+          />
+          <button
+            type="button"
+            onClick={() => dispatch({ type: 'RESET' })}
+            className="
+              rounded border border-border px-3 py-1.5
+              text-xs text-mid uppercase tracking-widest
+              hover:border-accent hover:text-accent
+              transition-colors
+            "
+          >
+            Reset
+          </button>
+        </div>
       </header>
 
       {/* ── Body ─────────────────────────────────────────────────────────────── */}

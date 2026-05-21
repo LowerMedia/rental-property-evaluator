@@ -8,9 +8,20 @@ export { Evaluator } from './Evaluator';
 export { dealReducer } from './state/dealReducer';
 export { DEFAULT_INPUTS } from './state/defaultInputs';
 export type { DealAction } from './state/dealReducer';
+export {
+  loadStore,
+  persistStore,
+  migrateStore,
+  createEmptyStore,
+  STORAGE_KEY,
+  SCHEMA_VERSION,
+} from './state/savedDealsSchema';
+export type { SavedDeal, SavedDealsStore } from './state/savedDealsSchema';
 
 // ── Hooks ────────────────────────────────────────────────────────────────────
 export { useEvaluate } from './hooks/useEvaluate';
+export { useSavedDeals } from './hooks/useSavedDeals';
+export type { UseSavedDealsReturn } from './hooks/useSavedDeals';
 
 // ── Utilities ────────────────────────────────────────────────────────────────
 export {
