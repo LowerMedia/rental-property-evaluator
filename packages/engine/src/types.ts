@@ -215,8 +215,9 @@ export interface ProjectionYear {
 
   // ── Tax / depreciation (RPE-32) ────────────────────────────────────────────
   /**
-   * Annual straight-line depreciation: (purchasePrice − landValue) / 27.5.
-   * Constant across all years. Zero when landValue ≥ purchasePrice or inputs omitted.
+   * Annual straight-line depreciation: (purchasePrice − landValue) / 27.5, capped at
+   * the remaining depreciable basis. Zero after the 27.5-year MACRS recovery period
+   * (typically years 28+), and zero when landValue ≥ purchasePrice.
    */
   depreciationAnnual: number;
   /**
@@ -232,15 +233,16 @@ export interface ProjectionYear {
   taxableIncome: number;
   /**
    * Tax savings from paper losses = max(0, −taxableIncome) × marginalTaxPct / 100.
-   * Zero when taxableIncome ≥ 0 or marginalTaxPct is not set.
+   * null when marginalTaxPct is not provided (taxes not modelled — render "—").
+   * Zero when taxableIncome ≥ 0.
    * Simplified — does not apply the $25,000 passive-activity loss allowance or phase-outs.
    */
-  taxSavings: number;
+  taxSavings: number | null;
   /**
    * After-tax cash flow = cashFlowAnnual + taxSavings.
-   * Reflects the tax benefit of depreciation / interest deductions against cash position.
+   * null when marginalTaxPct is not provided (taxes not modelled — render "—").
    */
-  cashFlowAfterTax: number;
+  cashFlowAfterTax: number | null;
 }
 
 /**
