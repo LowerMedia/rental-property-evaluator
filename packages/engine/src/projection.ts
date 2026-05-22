@@ -7,6 +7,7 @@
  *   - Property value appreciation at appreciationPct (applied end-of-year)
  *   - Debt service from the amortization schedule (zero after loan payoff)
  *   - Remaining loan balance from the amortization schedule (end-of-year)
+ *   - Depreciation, interest paid, taxable income, tax savings, after-tax cash flow (RPE-32)
  *
  * Inputs MUST be pre-normalised via normalizeInputs() before calling calcProjection().
  *
@@ -75,6 +76,13 @@ export function calcProjection(inputs: DealInputs): ProjectionYear[] {
   const otherIncome = inputs.otherIncome ?? 0;
   const capExInNOI = inputs.capExInNOI ?? true;
 
+  // ── Depreciation (RPE-32) — straight-line MACRS residential, 27.5 years ───
+  // maxAnnualDepreciation is the full-year rate; per-year amount is capped at the
+  // remaining depreciable basis so years after the 27.5-year recovery period show $0.
+  const landValue = inputs.landValue ?? 0;
+  const depreciableBasis = Math.max(0, purchasePrice - landValue);
+  const maxAnnualDepreciation = depreciableBasis / 27.5;
+
   // ── Loan primitives (single amortize call) ────────────────────────────────
   // Use floored loanTermYears so the amortization schedule and debt-service guard
   // are consistent with the per-year loop index comparisons.
@@ -138,14 +146,46 @@ export function calcProjection(inputs: DealInputs): ProjectionYear[] {
     const cashFlowAnnual = noiAnnual - annualDebtService;
     cumulativeCashFlow += cashFlowAnnual;
 
-    // ── Loan balance at end of year y ────────────────────────────────────────
+    // ── Loan balance & interest paid at end of year y ────────────────────────
     // End-of-year balance from the amortization schedule; 0 if loan is paid off.
     const lastMonthIdx = y * 12 - 1; // 0-based index into rows array
     const loanBalance = schedule?.rows[lastMonthIdx]?.balance ?? 0;
 
+    // Sum monthly interest payments for the 12 months in this year.
+    const firstMonthIdx = (y - 1) * 12;
+    let interestPaid = 0;
+    if (schedule) {
+      for (let m = firstMonthIdx; m <= lastMonthIdx; m++) {
+        interestPaid += schedule.rows[m]?.interest ?? 0;
+      }
+    }
+
     // ── Property value & equity ──────────────────────────────────────────────
     const propertyValue = purchasePrice * appF;
     const equity = propertyValue - loanBalance;
+
+    // ── Depreciation / tax (RPE-32) ──────────────────────────────────────────
+    // MACRS 27.5-year: cap at remaining depreciable basis so years beyond the
+    // recovery period correctly show $0 rather than continuing to depreciate.
+    const depreciationAnnual = Math.max(
+      0,
+      Math.min(maxAnnualDepreciation, depreciableBasis - (y - 1) * maxAnnualDepreciation),
+    );
+
+    // Taxable income = NOI − mortgage interest deduction − depreciation deduction.
+    // Simplified: ignores passive-activity loss phase-outs. Negative = paper loss.
+    const taxableIncome = noiAnnual - interestPaid - depreciationAnnual;
+
+    // taxSavings and cashFlowAfterTax are null when marginalTaxPct is not provided
+    // (caller has not modelled taxes — render "—" in the UI per codebase convention).
+    let taxSavings: number | null = null;
+    let cashFlowAfterTax: number | null = null;
+    if (inputs.marginalTaxPct !== undefined) {
+      taxSavings = taxableIncome < 0
+        ? (-taxableIncome) * (inputs.marginalTaxPct / 100)
+        : 0;
+      cashFlowAfterTax = cashFlowAnnual + taxSavings;
+    }
 
     years.push({
       year: y,
@@ -159,6 +199,11 @@ export function calcProjection(inputs: DealInputs): ProjectionYear[] {
       loanBalance,
       propertyValue,
       equity,
+      depreciationAnnual,
+      interestPaid,
+      taxableIncome,
+      taxSavings,
+      cashFlowAfterTax,
     });
   }
 

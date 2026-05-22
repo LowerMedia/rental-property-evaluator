@@ -446,6 +446,242 @@ describe('calcProjection — other income grows with rent', () => {
   });
 });
 
+// ─── RPE-32: depreciation + after-tax cash flow ───────────────────────────────
+
+describe('calcProjection — depreciation (RPE-32)', () => {
+  const inputs = normalizeInputs({
+    ...BASE,
+    purchasePrice: 300_000,
+    landValue: 60_000,
+    holdYears: 5,
+    rentGrowthPct: 0,
+    expenseGrowthPct: 0,
+    appreciationPct: 0,
+  });
+  const projection = calcProjection(inputs);
+
+  it('depreciationAnnual = (purchasePrice − landValue) / 27.5', () => {
+    // (300_000 - 60_000) / 27.5 = 240_000 / 27.5 ≈ 8_727.27
+    expect(projection[0]!.depreciationAnnual).toBeCloseTo(240_000 / 27.5, 4);
+  });
+
+  it('depreciationAnnual is constant for years within the 27.5-year recovery period', () => {
+    // holdYears:5 — all within recovery period, so all years should equal Year-1
+    const base = projection[0]!.depreciationAnnual;
+    for (const y of projection) {
+      expect(y.depreciationAnnual).toBeCloseTo(base, 6);
+    }
+  });
+
+  it('depreciationAnnual is 0 for years beyond the 27.5-year recovery period', () => {
+    // 30-year hold: years 1-27 have full depreciation; year 28 has partial; years 29-30 → 0
+    const longHold = calcProjection(
+      normalizeInputs({
+        ...BASE,
+        purchasePrice: 300_000,
+        landValue: 60_000,      // depreciable basis = 240_000
+        interestRate: 0,        // cash-equivalent to avoid amortization table length issues
+        percentDown: 100,
+        holdYears: 30,
+        rentGrowthPct: 0,
+        expenseGrowthPct: 0,
+        appreciationPct: 0,
+      }),
+    );
+    // Cumulative depreciation must not exceed depreciable basis
+    const totalDepr = longHold.reduce((sum, y) => sum + y.depreciationAnnual, 0);
+    expect(totalDepr).toBeCloseTo(240_000, 2);
+    // Years 29 and 30 should have 0 depreciation
+    expect(longHold[28]!.depreciationAnnual).toBe(0);
+    expect(longHold[29]!.depreciationAnnual).toBe(0);
+  });
+
+  it('depreciationAnnual = 0 when landValue >= purchasePrice', () => {
+    const p = calcProjection(
+      normalizeInputs({ ...BASE, purchasePrice: 300_000, landValue: 300_000, holdYears: 3 }),
+    );
+    expect(p[0]!.depreciationAnnual).toBe(0);
+  });
+
+  it('depreciationAnnual = purchasePrice / 27.5 when landValue is omitted', () => {
+    const p = calcProjection(normalizeInputs({ ...BASE, holdYears: 3 }));
+    // landValue defaults to 0 → full price is depreciable
+    expect(p[0]!.depreciationAnnual).toBeCloseTo(300_000 / 27.5, 4);
+  });
+});
+
+describe('calcProjection — interestPaid (RPE-32)', () => {
+  const inputs = normalizeInputs({
+    ...BASE,
+    holdYears: 5,
+    rentGrowthPct: 0,
+    expenseGrowthPct: 0,
+    appreciationPct: 0,
+  });
+  const projection = calcProjection(inputs);
+
+  it('interestPaid > 0 for Year 1 (financed deal)', () => {
+    expect(projection[0]!.interestPaid).toBeGreaterThan(0);
+  });
+
+  it('interestPaid decreases each year (amortization effect)', () => {
+    for (let i = 1; i < projection.length; i++) {
+      expect(projection[i]!.interestPaid).toBeLessThan(projection[i - 1]!.interestPaid);
+    }
+  });
+
+  it('interestPaid is less than annualDebtService (some portion is principal)', () => {
+    for (const y of projection) {
+      expect(y.interestPaid).toBeLessThan(y.annualDebtService);
+    }
+  });
+
+  it('interestPaid = 0 for a cash purchase', () => {
+    const p = calcProjection(
+      normalizeInputs({ ...BASE, percentDown: 100, holdYears: 3 }),
+    );
+    for (const y of p) {
+      expect(y.interestPaid).toBe(0);
+    }
+  });
+});
+
+describe('calcProjection — taxableIncome & taxSavings (RPE-32)', () => {
+  it('taxableIncome = noiAnnual − interestPaid − depreciationAnnual', () => {
+    const inputs = normalizeInputs({
+      ...BASE,
+      landValue: 60_000,
+      holdYears: 5,
+      rentGrowthPct: 0,
+      expenseGrowthPct: 0,
+      appreciationPct: 0,
+    });
+    const projection = calcProjection(inputs);
+    for (const y of projection) {
+      expect(y.taxableIncome).toBeCloseTo(
+        y.noiAnnual - y.interestPaid - y.depreciationAnnual,
+        4,
+      );
+    }
+  });
+
+  it('taxSavings = null when marginalTaxPct is not provided', () => {
+    // BASE has no marginalTaxPct → taxes not modelled → null (render "—" in UI)
+    const p = calcProjection(normalizeInputs({ ...BASE, holdYears: 3 }));
+    for (const y of p) {
+      expect(y.taxSavings).toBeNull();
+    }
+  });
+
+  it('taxSavings > 0 when there is a paper loss and marginalTaxPct is set', () => {
+    const inputs = normalizeInputs({
+      ...BASE,
+      purchasePrice: 300_000,
+      landValue: 0,             // full purchase price depreciable → large paper loss
+      marginalTaxPct: 32,
+      holdYears: 3,
+      rentGrowthPct: 0,
+      expenseGrowthPct: 0,
+      appreciationPct: 0,
+    });
+    const p = calcProjection(inputs);
+    // With 300k / 27.5 ≈ $10,909 depreciation + interest, paper loss is very likely
+    const hasLoss = p.some((y) => y.taxableIncome < 0);
+    if (hasLoss) {
+      expect(p.find((y) => y.taxableIncome < 0)!.taxSavings).toBeGreaterThan(0);
+    }
+  });
+
+  it('taxSavings = max(0, −taxableIncome) × marginalTaxPct/100', () => {
+    const inputs = normalizeInputs({
+      ...BASE,
+      landValue: 0,
+      marginalTaxPct: 25,
+      holdYears: 3,
+      rentGrowthPct: 0,
+      expenseGrowthPct: 0,
+      appreciationPct: 0,
+    });
+    const p = calcProjection(inputs);
+    for (const y of p) {
+      const expected = y.taxableIncome < 0 ? (-y.taxableIncome) * 0.25 : 0;
+      expect(y.taxSavings).toBeCloseTo(expected, 6);
+    }
+  });
+
+  it('taxSavings = 0 when taxableIncome >= 0', () => {
+    // High-rent, low-value property → positive taxable income
+    const inputs = normalizeInputs({
+      ...BASE,
+      purchasePrice: 100_000,  // small building value → small depreciation
+      landValue: 90_000,       // only $10k depreciable → ~$364/yr depreciation
+      grossRent: 5_000,        // high rent → NOI swamps deductions
+      marginalTaxPct: 32,
+      holdYears: 3,
+      rentGrowthPct: 0,
+      expenseGrowthPct: 0,
+      appreciationPct: 0,
+    });
+    const p = calcProjection(inputs);
+    for (const y of p) {
+      if (y.taxableIncome >= 0) {
+        expect(y.taxSavings).toBe(0);
+      }
+    }
+  });
+});
+
+describe('calcProjection — cashFlowAfterTax (RPE-32)', () => {
+  it('cashFlowAfterTax = cashFlowAnnual + taxSavings for every year', () => {
+    const inputs = normalizeInputs({
+      ...BASE,
+      landValue: 0,
+      marginalTaxPct: 28,
+      holdYears: 5,
+      rentGrowthPct: 0,
+      expenseGrowthPct: 0,
+      appreciationPct: 0,
+    });
+    const p = calcProjection(inputs);
+    for (const y of p) {
+      // marginalTaxPct is provided → taxSavings and cashFlowAfterTax are non-null
+      expect(y.cashFlowAfterTax).toBeCloseTo(y.cashFlowAnnual + y.taxSavings!, 6);
+    }
+  });
+
+  it('cashFlowAfterTax = cashFlowAnnual when marginalTaxPct = 0', () => {
+    const inputs = normalizeInputs({
+      ...BASE,
+      marginalTaxPct: 0,
+      holdYears: 3,
+      rentGrowthPct: 0,
+      expenseGrowthPct: 0,
+      appreciationPct: 0,
+    });
+    const p = calcProjection(inputs);
+    for (const y of p) {
+      expect(y.cashFlowAfterTax).toBeCloseTo(y.cashFlowAnnual, 6);
+    }
+  });
+
+  it('cashFlowAfterTax >= cashFlowAnnual when there is a paper loss', () => {
+    // Tax savings always >= 0, so after-tax >= pre-tax
+    const inputs = normalizeInputs({
+      ...BASE,
+      landValue: 0,
+      marginalTaxPct: 32,
+      holdYears: 5,
+      rentGrowthPct: 0,
+      expenseGrowthPct: 0,
+      appreciationPct: 0,
+    });
+    const p = calcProjection(inputs);
+    for (const y of p) {
+      expect(y.cashFlowAfterTax).toBeGreaterThanOrEqual(y.cashFlowAnnual - 0.001);
+    }
+  });
+});
+
 // ─── guard: loanTermYears = 0 with non-zero loan (RPE-29 review fix) ─────────
 
 describe('calcProjection — loanTermYears = 0 guard', () => {
