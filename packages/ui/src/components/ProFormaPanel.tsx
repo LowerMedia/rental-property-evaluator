@@ -204,7 +204,7 @@ export function ProFormaPanel({ results }: ProFormaPanelProps) {
         <KpiCard
           label="NPV"
           value={npv !== null ? fmtCurrency(npv, false) : NULL_DISPLAY}
-          sub={npv !== null ? (npv >= 0 ? 'positive — deal beats hurdle' : 'negative — below hurdle') : 'set discount rate to compute'}
+          sub={npv !== null ? (npv >= 0 ? 'positive — deal beats hurdle' : 'negative — below hurdle') : 'set discount rate > 0 to compute'}
           tone={npv === null ? 'lo' : npv >= 0 ? 'pass' : 'warn'}
         />
       </div>
