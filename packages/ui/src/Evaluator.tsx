@@ -336,7 +336,14 @@ export function Evaluator() {
   const activeNormalized = useMemo(() => normalizeInputs(activeInputs), [activeInputs]);
   const proFormaResults = useMemo<ProFormaResults | null>(() => {
     if (!proFormaMode) return null;
-    return evaluate(activeNormalized, { mode: 'proforma' }) as ProFormaResults;
+    // Strip zero-valued optional rate fields so the engine treats them as "unset"
+    // (0 !== undefined in engine checks, but 0% tax/hurdle has no practical meaning).
+    const pfInputs: DealInputs = {
+      ...activeNormalized,
+      marginalTaxPct: activeNormalized.marginalTaxPct || undefined,
+      discountRatePct: activeNormalized.discountRatePct || undefined,
+    };
+    return evaluate(pfInputs, { mode: 'proforma' }) as ProFormaResults;
   }, [proFormaMode, activeNormalized]);
 
   const handleLoadDeal = (deal: SavedDeal) => {
