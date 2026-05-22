@@ -14,13 +14,14 @@ interface KpiCardProps {
   label: string;
   value: string;
   sub?: string;
-  tone?: 'pass' | 'warn' | 'hi' | 'lo';
+  tone?: 'pass' | 'warn' | 'fail' | 'hi' | 'lo';
 }
 
 function KpiCard({ label, value, sub, tone = 'hi' }: KpiCardProps) {
   const valueClass =
     tone === 'pass' ? 'text-pass' :
     tone === 'warn' ? 'text-warn' :
+    tone === 'fail' ? 'text-fail' :
     tone === 'lo'   ? 'text-lo'   : 'text-hi';
 
   return (
@@ -168,7 +169,7 @@ export function ProFormaPanel({ results }: ProFormaPanelProps) {
   const isEmpty = projection.length === 0;
 
   // IRR signal
-  const irrTone = irr === null ? 'lo' : irr >= 15 ? 'pass' : irr >= 8 ? 'warn' : 'hi';
+  const irrTone = irr === null ? 'lo' : irr >= 15 ? 'pass' : irr >= 8 ? 'warn' : 'fail';
   // Total profit tone
   const profitTone = totalProfit === null ? 'lo' : totalProfit >= 0 ? 'pass' : 'warn';
 

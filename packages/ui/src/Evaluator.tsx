@@ -359,7 +359,7 @@ export function Evaluator() {
           <h1 className="font-display text-xl tracking-wide text-hi">
             Rental Property Evaluator
           </h1>
-          <span className="hidden text-xs text-lo sm:inline">Screener</span>
+          <span className="hidden text-xs text-lo sm:inline">{proFormaMode ? 'Pro-Forma' : 'Screener'}</span>
         </div>
         <div className="no-print flex items-center gap-2">
           <ModeToggle proFormaMode={proFormaMode} onChange={handleSetProFormaMode} />
