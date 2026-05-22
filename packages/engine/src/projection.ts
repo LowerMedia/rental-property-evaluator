@@ -75,12 +75,13 @@ export function calcProjection(inputs: DealInputs): ProjectionYear[] {
 
   const otherIncome = inputs.otherIncome ?? 0;
   const capExInNOI = inputs.capExInNOI ?? true;
-  const marginalTaxPct = inputs.marginalTaxPct ?? 0;
 
   // ── Depreciation (RPE-32) — straight-line MACRS residential, 27.5 years ───
+  // maxAnnualDepreciation is the full-year rate; per-year amount is capped at the
+  // remaining depreciable basis so years after the 27.5-year recovery period show $0.
   const landValue = inputs.landValue ?? 0;
   const depreciableBasis = Math.max(0, purchasePrice - landValue);
-  const depreciationAnnual = depreciableBasis / 27.5;
+  const maxAnnualDepreciation = depreciableBasis / 27.5;
 
   // ── Loan primitives (single amortize call) ────────────────────────────────
   // Use floored loanTermYears so the amortization schedule and debt-service guard
@@ -164,14 +165,27 @@ export function calcProjection(inputs: DealInputs): ProjectionYear[] {
     const equity = propertyValue - loanBalance;
 
     // ── Depreciation / tax (RPE-32) ──────────────────────────────────────────
+    // MACRS 27.5-year: cap at remaining depreciable basis so years beyond the
+    // recovery period correctly show $0 rather than continuing to depreciate.
+    const depreciationAnnual = Math.max(
+      0,
+      Math.min(maxAnnualDepreciation, depreciableBasis - (y - 1) * maxAnnualDepreciation),
+    );
+
     // Taxable income = NOI − mortgage interest deduction − depreciation deduction.
     // Simplified: ignores passive-activity loss phase-outs. Negative = paper loss.
     const taxableIncome = noiAnnual - interestPaid - depreciationAnnual;
-    // Tax savings apply only when there is a paper loss (taxableIncome < 0).
-    const taxSavings = taxableIncome < 0
-      ? (-taxableIncome) * (marginalTaxPct / 100)
-      : 0;
-    const cashFlowAfterTax = cashFlowAnnual + taxSavings;
+
+    // taxSavings and cashFlowAfterTax are null when marginalTaxPct is not provided
+    // (caller has not modelled taxes — render "—" in the UI per codebase convention).
+    let taxSavings: number | null = null;
+    let cashFlowAfterTax: number | null = null;
+    if (inputs.marginalTaxPct !== undefined) {
+      taxSavings = taxableIncome < 0
+        ? (-taxableIncome) * (inputs.marginalTaxPct / 100)
+        : 0;
+      cashFlowAfterTax = cashFlowAnnual + taxSavings;
+    }
 
     years.push({
       year: y,

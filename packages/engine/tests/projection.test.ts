@@ -465,11 +465,35 @@ describe('calcProjection — depreciation (RPE-32)', () => {
     expect(projection[0]!.depreciationAnnual).toBeCloseTo(240_000 / 27.5, 4);
   });
 
-  it('depreciationAnnual is constant across all years', () => {
+  it('depreciationAnnual is constant for years within the 27.5-year recovery period', () => {
+    // holdYears:5 — all within recovery period, so all years should equal Year-1
     const base = projection[0]!.depreciationAnnual;
     for (const y of projection) {
       expect(y.depreciationAnnual).toBeCloseTo(base, 6);
     }
+  });
+
+  it('depreciationAnnual is 0 for years beyond the 27.5-year recovery period', () => {
+    // 30-year hold: years 1-27 have full depreciation; year 28 has partial; years 29-30 → 0
+    const longHold = calcProjection(
+      normalizeInputs({
+        ...BASE,
+        purchasePrice: 300_000,
+        landValue: 60_000,      // depreciable basis = 240_000
+        interestRate: 0,        // cash-equivalent to avoid amortization table length issues
+        percentDown: 100,
+        holdYears: 30,
+        rentGrowthPct: 0,
+        expenseGrowthPct: 0,
+        appreciationPct: 0,
+      }),
+    );
+    // Cumulative depreciation must not exceed depreciable basis
+    const totalDepr = longHold.reduce((sum, y) => sum + y.depreciationAnnual, 0);
+    expect(totalDepr).toBeCloseTo(240_000, 2);
+    // Years 29 and 30 should have 0 depreciation
+    expect(longHold[28]!.depreciationAnnual).toBe(0);
+    expect(longHold[29]!.depreciationAnnual).toBe(0);
   });
 
   it('depreciationAnnual = 0 when landValue >= purchasePrice', () => {
@@ -541,11 +565,11 @@ describe('calcProjection — taxableIncome & taxSavings (RPE-32)', () => {
     }
   });
 
-  it('taxSavings = 0 when marginalTaxPct is not provided', () => {
-    // BASE has no marginalTaxPct → defaults to 0 → no tax savings even with paper loss
+  it('taxSavings = null when marginalTaxPct is not provided', () => {
+    // BASE has no marginalTaxPct → taxes not modelled → null (render "—" in UI)
     const p = calcProjection(normalizeInputs({ ...BASE, holdYears: 3 }));
     for (const y of p) {
-      expect(y.taxSavings).toBe(0);
+      expect(y.taxSavings).toBeNull();
     }
   });
 
@@ -620,7 +644,8 @@ describe('calcProjection — cashFlowAfterTax (RPE-32)', () => {
     });
     const p = calcProjection(inputs);
     for (const y of p) {
-      expect(y.cashFlowAfterTax).toBeCloseTo(y.cashFlowAnnual + y.taxSavings, 6);
+      // marginalTaxPct is provided → taxSavings and cashFlowAfterTax are non-null
+      expect(y.cashFlowAfterTax).toBeCloseTo(y.cashFlowAnnual + y.taxSavings!, 6);
     }
   });
 
