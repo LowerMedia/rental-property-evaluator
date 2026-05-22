@@ -26,6 +26,7 @@ export type { LoanResult } from './loan';
 export { calcScreener } from './screener';
 export { calcProjection } from './projection';
 export { calcProForma } from './proforma';
+export { calcIRR, calcNPV } from './irr';
 export { SCREENER_METRIC_CONFIG } from './directions';
 export type { MetricDirection, MetricConfig } from './directions';
 
