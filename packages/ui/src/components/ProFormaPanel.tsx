@@ -84,9 +84,11 @@ function ProjectionTable({ rows }: ProjectionTableProps) {
                   {fmtCurrency(y.cumulativeCashFlow)}
                 </td>
                 <td className="px-3 py-1.5 num tabular-nums text-mid">
-                  {y.taxSavings > 0
-                    ? fmtCurrency(y.cashFlowAfterTax)
-                    : <span className="text-lo">{fmtCurrency(y.cashFlowAfterTax)}</span>
+                  {y.cashFlowAfterTax === null
+                    ? <span className="text-lo">{NULL_DISPLAY}</span>
+                    : (y.taxSavings ?? 0) > 0
+                      ? fmtCurrency(y.cashFlowAfterTax)
+                      : <span className="text-lo">{fmtCurrency(y.cashFlowAfterTax)}</span>
                   }
                 </td>
                 <td className="px-3 py-1.5 num tabular-nums text-mid">
