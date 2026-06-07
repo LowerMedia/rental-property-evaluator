@@ -5,6 +5,7 @@ import { useSavedDeals } from './hooks/useSavedDeals';
 import { useScenarios } from './hooks/useScenarios';
 import { buildShareUrl } from './utils/shareUrl';
 import { exportToCsv } from './utils/exportCsv';
+import { AdSlot } from './components/AdSlot';
 import { DealInputsForm } from './components/inputs/DealInputsForm';
 import { SavedDealsPanel } from './components/SavedDealsPanel';
 import { ScenarioTabs } from './components/ScenarioTabs';
@@ -287,7 +288,19 @@ function ShareButton({ inputs }: { inputs: DealInputs }) {
  * Single scenario: standard two-panel layout (inputs | ResultsPanel).
  * 2–4 scenarios: ScenarioTabs on the inputs panel + ComparisonPanel on the right.
  */
-export function Evaluator() {
+/**
+ * Ad configuration for gated ad slots (RPE-39).
+ * Omit entirely to render zero ad-related markup — the WP block never
+ * passes this prop, keeping embedded usage completely ad-free.
+ */
+export interface AdConfig {
+  /** AdSense publisher client ID — ca-pub-XXXXXXXXXXXXXXXX. */
+  client: string;
+  /** Ad slot ID for the unit displayed in the results panel. */
+  resultsSlot: string;
+}
+
+export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
   const {
     scenarios,
     activeIdx,
@@ -465,6 +478,15 @@ export function Evaluator() {
                 loanTermYears={activeNormalized.loanTermYears}
               />
             </div>
+          )}
+
+          {/* Gated ad slot — only rendered when adConfig is provided (RPE-39). */}
+          {adConfig && (
+            <AdSlot
+              client={adConfig.client}
+              slot={adConfig.resultsSlot}
+              className="mt-4"
+            />
           )}
         </section>
       </main>
