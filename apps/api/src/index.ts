@@ -264,20 +264,18 @@ async function handleEvaluate(req: IncomingMessage, res: ServerResponse): Promis
     return;
   }
 
-  // Validate required nested shape — each expense item must have a finite numeric
-  // amount and a recognised period string. The engine silently defaults to monthly
-  // for unrecognised periods, yielding incorrect calculations instead of a 400.
+  // Guard: expenses must be a plain object — not null, not array.
   const expField = Object.hasOwn(rawInputs, 'expenses') ? rawInputs['expenses'] : undefined;
-  if (typeof expField !== 'object' || expField === null) {
+  if (typeof expField !== 'object' || expField === null || Array.isArray(expField)) {
     json(res, 400, {
       error:
-        'inputs.expenses must include taxes and insurance, each { amount: number, period: "monthly" | "annual" }',
+        'inputs.expenses must be an object including taxes and insurance, each { amount: number, period: "monthly" | "annual" }',
     });
     return;
   }
   const expObj = expField as Record<string, unknown>;
 
-  // taxes and insurance are required.
+  // taxes and insurance are required ExpenseInput fields.
   if (!Object.hasOwn(expObj, 'taxes') || !Object.hasOwn(expObj, 'insurance')) {
     json(res, 400, {
       error:
@@ -286,12 +284,31 @@ async function handleEvaluate(req: IncomingMessage, res: ServerResponse): Promis
     return;
   }
 
-  // All provided expense items (required and optional — hoa, other, etc.) must
-  // have a valid shape; the engine silently defaults bad periods to monthly.
-  const malformedExpenses = Object.keys(expObj).filter((k) => !isValidExpenseItem(expObj[k]));
-  if (malformedExpenses.length > 0) {
+  // DealExpenses has two field categories — validate each appropriately:
+  //   ExpenseInput fields (taxes, insurance, hoa, other): { amount: number, period: "monthly"|"annual" }
+  //   Numeric % fields (capExPct, maintPct, mgmtPct, miscPct): finite number
+  // Unknown keys are forwarded as-is (forward-compatible with future engine fields).
+  const EXPENSE_ITEM_KEYS = new Set(['taxes', 'insurance', 'hoa', 'other']);
+  const EXPENSE_PCT_KEYS = new Set(['capExPct', 'maintPct', 'mgmtPct', 'miscPct']);
+
+  const invalidItemKeys = Object.keys(expObj).filter(
+    (k) => EXPENSE_ITEM_KEYS.has(k) && !isValidExpenseItem(expObj[k]),
+  );
+  if (invalidItemKeys.length > 0) {
     json(res, 400, {
-      error: `inputs.expenses items must each be { amount: number, period: "monthly" | "annual" }; invalid: ${malformedExpenses.join(', ')}`,
+      error: `inputs.expenses.${invalidItemKeys.join(', ')} must each be { amount: number, period: "monthly" | "annual" }`,
+    });
+    return;
+  }
+
+  const invalidPctKeys = Object.keys(expObj).filter(
+    (k) =>
+      EXPENSE_PCT_KEYS.has(k) &&
+      (typeof expObj[k] !== 'number' || !Number.isFinite(expObj[k] as number)),
+  );
+  if (invalidPctKeys.length > 0) {
+    json(res, 400, {
+      error: `inputs.expenses.${invalidPctKeys.join(', ')} must each be a finite number`,
     });
     return;
   }

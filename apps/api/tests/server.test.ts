@@ -253,6 +253,42 @@ describe('@rpe/api', () => {
       expect(typeof body['error']).toBe('string');
     });
 
+    it('returns 200 when optional numeric expense % fields are provided', async () => {
+      // capExPct, maintPct, mgmtPct, miscPct are plain finite numbers, not ExpenseInput objects.
+      // Earlier all-keys validation incorrectly rejected them — this guards against regression.
+      const res = await fetch(`${base}/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inputs: {
+            ...VALID_INPUTS,
+            expenses: {
+              ...VALID_INPUTS.expenses,
+              capExPct: 5,
+              mgmtPct: 8,
+            },
+          },
+        }),
+      });
+      const body = await res.json() as Record<string, unknown>;
+      expect(res.status).toBe(200);
+      expect(body).toHaveProperty('results');
+    });
+
+    it('returns 400 when inputs.expenses is an array', async () => {
+      // expenses must be a plain object — arrays pass typeof === 'object' but must be rejected.
+      const res = await fetch(`${base}/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inputs: { ...VALID_INPUTS, expenses: [] },
+        }),
+      });
+      const body = await res.json() as Record<string, unknown>;
+      expect(res.status).toBe(400);
+      expect(typeof body['error']).toBe('string');
+    });
+
     it('returns 400 when inputs.expenses is missing', async () => {
       const res = await fetch(`${base}/evaluate`, {
         method: 'POST',
