@@ -16,7 +16,11 @@ import { fileURLToPath } from 'url';
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 export default defineConfig({
-  plugins: [react()],
+  // Classic JSX runtime: emits React.createElement() calls so the `react` →
+  // `wp.element` global mapping works correctly at runtime. The automatic
+  // runtime would introduce `react/jsx-runtime` imports which are NOT
+  // externalized and would either fail or bundle React internals accidentally.
+  plugins: [react({ jsxRuntime: 'classic' })],
   build: {
     outDir: 'build',
     emptyOutDir: true, // editor runs first, cleans build/

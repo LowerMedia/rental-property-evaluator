@@ -11,7 +11,7 @@
   "textdomain": "rental-property-evaluator",
   "editorScript": "file:./build/index.js",
   "viewScript": "file:./build/frontend.js",
-  "style": "file:./build/frontend.css",
+  "viewStyle": "file:./build/frontend.css",
   "supports": {
     "html": false,
     "align": ["wide", "full"]
