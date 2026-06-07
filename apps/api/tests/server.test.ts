@@ -176,6 +176,19 @@ describe('@rpe/api', () => {
       expect((body['error'] as string)).toContain('rollClosingCostsIntoLoan');
     });
 
+    it('returns 400 when a required numeric field is non-finite', async () => {
+      // JSON parses 1e9999 as Infinity — engine would silently use it, must reject.
+      // Note: JSON.stringify(Infinity) → "null", so we build the body string directly.
+      const res = await fetch(`${base}/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{"inputs":{"purchasePrice":1e9999,"percentDown":20,"interestRate":7,"loanTermYears":30,"closingCosts":0,"rollClosingCostsIntoLoan":false,"grossRent":2200,"vacancyPct":5,"expenses":{"taxes":{"amount":3600,"period":"annual"},"insurance":{"amount":1200,"period":"annual"}}}}',
+      });
+      const body = await res.json() as Record<string, unknown>;
+      expect(res.status).toBe(400);
+      expect((body['error'] as string)).toContain('purchasePrice');
+    });
+
     it('returns 400 when a required numeric field is null', async () => {
       // Engine coerces null to 0 — must reject with 400 instead of silently continuing.
       const res = await fetch(`${base}/evaluate`, {
