@@ -287,7 +287,8 @@ async function handleEvaluate(req: IncomingMessage, res: ServerResponse): Promis
   // DealExpenses has two field categories — validate each appropriately:
   //   ExpenseInput fields (taxes, insurance, hoa, other): { amount: number, period: "monthly"|"annual" }
   //   Numeric % fields (capExPct, maintPct, mgmtPct, miscPct): finite number
-  // Unknown keys are forwarded as-is (forward-compatible with future engine fields).
+  // Note: the engine's normalizeExpenses() only returns known fields, so unrecognised keys are
+  // silently dropped — they are validated here for shape only, not forwarded verbatim.
   const EXPENSE_ITEM_KEYS = new Set(['taxes', 'insurance', 'hoa', 'other']);
   const EXPENSE_PCT_KEYS = new Set(['capExPct', 'maintPct', 'mgmtPct', 'miscPct']);
 
@@ -295,8 +296,10 @@ async function handleEvaluate(req: IncomingMessage, res: ServerResponse): Promis
     (k) => EXPENSE_ITEM_KEYS.has(k) && !isValidExpenseItem(expObj[k]),
   );
   if (invalidItemKeys.length > 0) {
+    // Fully-qualify each key so the message is unambiguous (no "inputs.expenses.taxes, hoa" dotted-path confusion).
+    const qualifiedItemKeys = invalidItemKeys.map((k) => `inputs.expenses.${k}`).join(', ');
     json(res, 400, {
-      error: `inputs.expenses.${invalidItemKeys.join(', ')} must each be { amount: number, period: "monthly" | "annual" }`,
+      error: `${qualifiedItemKeys} must each be { amount: number, period: "monthly" | "annual" }`,
     });
     return;
   }
@@ -307,8 +310,10 @@ async function handleEvaluate(req: IncomingMessage, res: ServerResponse): Promis
       (typeof expObj[k] !== 'number' || !Number.isFinite(expObj[k] as number)),
   );
   if (invalidPctKeys.length > 0) {
+    // Fully-qualify each key so the message is unambiguous.
+    const qualifiedPctKeys = invalidPctKeys.map((k) => `inputs.expenses.${k}`).join(', ');
     json(res, 400, {
-      error: `inputs.expenses.${invalidPctKeys.join(', ')} must each be a finite number`,
+      error: `${qualifiedPctKeys} must each be a finite number`,
     });
     return;
   }
