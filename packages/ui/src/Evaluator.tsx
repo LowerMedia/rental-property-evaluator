@@ -453,7 +453,7 @@ export function Evaluator() {
           className="overflow-y-auto p-5"
         >
           {proFormaMode && proFormaResults ? (
-            <ProFormaPanel results={proFormaResults} />
+            <ProFormaPanel results={proFormaResults} purchasePrice={activeNormalized.purchasePrice} />
           ) : isComparing ? (
             <ComparisonPanel scenarios={scenarios} resultsList={resultsList} />
           ) : (
