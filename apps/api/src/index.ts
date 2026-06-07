@@ -151,12 +151,13 @@ async function handleEvaluate(req: IncomingMessage, res: ServerResponse): Promis
     return;
   }
 
+  const parsedObj = parsed as Record<string, unknown>;
   if (
     typeof parsed !== 'object' ||
     parsed === null ||
-    !('inputs' in parsed) ||
-    typeof (parsed as Record<string, unknown>)['inputs'] !== 'object' ||
-    (parsed as Record<string, unknown>)['inputs'] === null
+    !Object.hasOwn(parsedObj, 'inputs') ||
+    typeof parsedObj['inputs'] !== 'object' ||
+    parsedObj['inputs'] === null
   ) {
     json(res, 400, {
       error:
@@ -168,7 +169,8 @@ async function handleEvaluate(req: IncomingMessage, res: ServerResponse): Promis
   // Guard: opts, if present, must be a plain object — not a string, number, null, or array.
   // Without this check, `opts: "screener"` or `opts: null` would silently pass through
   // the mode validation and reach evaluate() with the wrong shape.
-  const rawOpts = (parsed as Record<string, unknown>)['opts'];
+  // Own-property check prevents prototype-chain values from satisfying the presence guard.
+  const rawOpts = Object.hasOwn(parsedObj, 'opts') ? parsedObj['opts'] : undefined;
   if (
     rawOpts !== undefined &&
     (typeof rawOpts !== 'object' || rawOpts === null || Array.isArray(rawOpts))
@@ -194,21 +196,25 @@ async function handleEvaluate(req: IncomingMessage, res: ServerResponse): Promis
     'closingCosts', 'rollClosingCostsIntoLoan', 'grossRent', 'vacancyPct',
   ] as const;
   const rawInputs = inputs as unknown as Record<string, unknown>;
-  const missingFields = REQUIRED_FIELDS.filter((k) => !(k in rawInputs));
+  const missingFields = REQUIRED_FIELDS.filter((k) => !Object.hasOwn(rawInputs, k));
   if (missingFields.length > 0) {
     json(res, 400, { error: `Missing required input fields: ${missingFields.join(', ')}` });
     return;
   }
 
   // Validate required nested shape — engine throws TypeError for missing expenses.
-  const expField = (inputs as unknown as Record<string, unknown>)['expenses'];
+  // All property lookups use Object.hasOwn to prevent prototype-chain pollution.
+  const expField = Object.hasOwn(rawInputs, 'expenses') ? rawInputs['expenses'] : undefined;
+  const expObj = expField as Record<string, unknown>;
   if (
     typeof expField !== 'object' ||
     expField === null ||
-    typeof (expField as Record<string, unknown>)['taxes'] !== 'object' ||
-    (expField as Record<string, unknown>)['taxes'] === null ||
-    typeof (expField as Record<string, unknown>)['insurance'] !== 'object' ||
-    (expField as Record<string, unknown>)['insurance'] === null
+    !Object.hasOwn(expObj, 'taxes') ||
+    typeof expObj['taxes'] !== 'object' ||
+    expObj['taxes'] === null ||
+    !Object.hasOwn(expObj, 'insurance') ||
+    typeof expObj['insurance'] !== 'object' ||
+    expObj['insurance'] === null
   ) {
     json(res, 400, {
       error:
