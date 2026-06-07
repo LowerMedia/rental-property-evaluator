@@ -65,11 +65,11 @@ final class RPE_Block {
 	 * block is present on the page; it finds this container and mounts
 	 * the React app into it on DOMContentLoaded.
 	 *
-	 * @param array<string,mixed> $attributes Block attributes (none defined in this version).
-	 * @param string              $content    Inner block content (unused — no inner blocks).
+	 * @param array<string,mixed> $_attributes Block attributes (none defined in this version).
+	 * @param string              $_content    Inner block content (unused — no inner blocks).
 	 * @return string Rendered HTML.
 	 */
-	public function render( array $attributes, string $content ): string {
+	public function render( array $_attributes, string $_content ): string {
 		return '<div data-rpe-block="evaluator"></div>';
 	}
 }
