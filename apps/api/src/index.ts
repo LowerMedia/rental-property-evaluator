@@ -55,6 +55,7 @@ const VERSION: string = (
 ).version;
 const MAX_BODY_BYTES = 64 * 1024; // 64 KB
 const VALID_MODES = new Set<string>(['screener', 'proforma']);
+const VALID_PERIODS = new Set<string>(['monthly', 'annual']);
 
 // ── CORS ───────────────────────────────────────────────────────────────────────
 
@@ -114,6 +115,24 @@ function validatePort(raw: string | undefined): number {
     );
   }
   return n;
+}
+
+/**
+ * Validates an expense line item is `{ amount: number, period: "monthly" | "annual" }`.
+ * Uses own-property checks and explicit type guards to reject coercible-but-wrong values
+ * (e.g. `amount: "3600"` or `period: "weekly"`).
+ */
+function isValidExpenseItem(item: unknown): boolean {
+  if (typeof item !== 'object' || item === null || Array.isArray(item)) return false;
+  const obj = item as Record<string, unknown>;
+  return (
+    Object.hasOwn(obj, 'amount') &&
+    typeof obj['amount'] === 'number' &&
+    Number.isFinite(obj['amount']) &&
+    Object.hasOwn(obj, 'period') &&
+    typeof obj['period'] === 'string' &&
+    VALID_PERIODS.has(obj['period'])
+  );
 }
 
 // ── Route handlers ─────────────────────────────────────────────────────────────
@@ -188,34 +207,46 @@ async function handleEvaluate(req: IncomingMessage, res: ServerResponse): Promis
     return;
   }
 
-  // Validate required top-level fields — engine normalises absent numerics to 0
-  // and absent booleans via Boolean() to false, both producing misleading results.
-  // rollClosingCostsIntoLoan must be present: omitting it silently becomes false.
-  const REQUIRED_FIELDS = [
+  // Validate required top-level fields — both presence AND type.
+  // Engine normalises absent/null numerics to 0 and non-boolean rollClosingCostsIntoLoan
+  // via Boolean() to false, both producing misleading results without a prior 400.
+  const REQUIRED_NUMERIC = [
     'purchasePrice', 'percentDown', 'interestRate', 'loanTermYears',
-    'closingCosts', 'rollClosingCostsIntoLoan', 'grossRent', 'vacancyPct',
+    'closingCosts', 'grossRent', 'vacancyPct',
   ] as const;
+  const REQUIRED_BOOLEAN = ['rollClosingCostsIntoLoan'] as const;
   const rawInputs = inputs as unknown as Record<string, unknown>;
-  const missingFields = REQUIRED_FIELDS.filter((k) => !Object.hasOwn(rawInputs, k));
-  if (missingFields.length > 0) {
-    json(res, 400, { error: `Missing required input fields: ${missingFields.join(', ')}` });
+
+  const invalidFields: string[] = [
+    ...REQUIRED_NUMERIC.filter(
+      (k) => !Object.hasOwn(rawInputs, k) || typeof rawInputs[k] !== 'number',
+    ),
+    ...REQUIRED_BOOLEAN.filter(
+      (k) => !Object.hasOwn(rawInputs, k) || typeof rawInputs[k] !== 'boolean',
+    ),
+  ];
+  if (invalidFields.length > 0) {
+    json(res, 400, {
+      error: `Invalid or missing required input fields: ${invalidFields.join(', ')}`,
+    });
     return;
   }
 
-  // Validate required nested shape — engine throws TypeError for missing expenses.
-  // All property lookups use Object.hasOwn to prevent prototype-chain pollution.
+  // Validate required nested shape — each expense item must have a finite numeric
+  // amount and a recognised period string. The engine silently defaults to monthly
+  // for unrecognised periods, yielding incorrect calculations instead of a 400.
   const expField = Object.hasOwn(rawInputs, 'expenses') ? rawInputs['expenses'] : undefined;
+  if (typeof expField !== 'object' || expField === null) {
+    json(res, 400, {
+      error:
+        'inputs.expenses must include taxes and insurance, each { amount: number, period: "monthly" | "annual" }',
+    });
+    return;
+  }
   const expObj = expField as Record<string, unknown>;
-  if (
-    typeof expField !== 'object' ||
-    expField === null ||
-    !Object.hasOwn(expObj, 'taxes') ||
-    typeof expObj['taxes'] !== 'object' ||
-    expObj['taxes'] === null ||
-    !Object.hasOwn(expObj, 'insurance') ||
-    typeof expObj['insurance'] !== 'object' ||
-    expObj['insurance'] === null
-  ) {
+  const taxItem = Object.hasOwn(expObj, 'taxes') ? expObj['taxes'] : undefined;
+  const insItem = Object.hasOwn(expObj, 'insurance') ? expObj['insurance'] : undefined;
+  if (!isValidExpenseItem(taxItem) || !isValidExpenseItem(insItem)) {
     json(res, 400, {
       error:
         'inputs.expenses must include taxes and insurance, each { amount: number, period: "monthly" | "annual" }',
