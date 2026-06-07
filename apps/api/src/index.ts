@@ -38,6 +38,7 @@
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { evaluate } from '@rpe/engine';
 import type { DealInputs, EvalOptions } from '@rpe/engine';
@@ -164,6 +165,23 @@ async function handleEvaluate(req: IncomingMessage, res: ServerResponse): Promis
     return;
   }
 
+  // Validate required nested shape — engine throws TypeError for missing expenses.
+  const expField = (inputs as unknown as Record<string, unknown>)['expenses'];
+  if (
+    typeof expField !== 'object' ||
+    expField === null ||
+    typeof (expField as Record<string, unknown>)['taxes'] !== 'object' ||
+    (expField as Record<string, unknown>)['taxes'] === null ||
+    typeof (expField as Record<string, unknown>)['insurance'] !== 'object' ||
+    (expField as Record<string, unknown>)['insurance'] === null
+  ) {
+    json(res, 400, {
+      error:
+        'inputs.expenses must include taxes and insurance, each { amount: number, period: "monthly" | "annual" }',
+    });
+    return;
+  }
+
   try {
     const results = evaluate(inputs, opts);
     json(res, 200, { results });
@@ -204,7 +222,7 @@ export function createApp() {
 // ── Entry point (skipped when imported by tests/other modules) ────────────────
 
 const __filename = fileURLToPath(import.meta.url);
-if (process.argv[1] === __filename) {
+if (resolve(process.argv[1] ?? '') === __filename) {
   const port = validatePort(process.env['PORT']);
   const host = process.env['HOST'] ?? '0.0.0.0';
   const server = createApp();
