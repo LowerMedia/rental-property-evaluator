@@ -227,7 +227,9 @@ export function ProFormaPanel({ results, purchasePrice }: ProFormaPanelProps) {
           <EquityBuildChart
             years={projection}
             purchasePrice={purchasePrice}
-            initialLoanBalance={results.screener.loanAmount ?? 0}
+            initialLoanBalance={
+              results.screener.loanAmount === null ? undefined : results.screener.loanAmount
+            }
           />
         </div>
       )}
