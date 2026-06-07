@@ -34,9 +34,12 @@ describe('@rpe/api', () => {
 
   beforeAll(
     () =>
-      new Promise<void>((resolve) => {
+      new Promise<void>((resolve, reject) => {
         server = createApp();
+        // Wire the error event so a failed listen() fails fast rather than hanging.
+        server.once('error', reject);
         server.listen(0, '127.0.0.1', () => {
+          server.off('error', reject);
           const addr = server.address() as { port: number };
           base = `http://127.0.0.1:${addr.port}`;
           resolve();
@@ -208,6 +211,26 @@ describe('@rpe/api', () => {
             expenses: {
               taxes: { amount: 3600, period: 'weekly' },
               insurance: { amount: 1200, period: 'annual' },
+            },
+          },
+        }),
+      });
+      const body = await res.json() as Record<string, unknown>;
+      expect(res.status).toBe(400);
+      expect(typeof body['error']).toBe('string');
+    });
+
+    it('returns 400 when an optional expense item has an invalid shape', async () => {
+      // Optional items (hoa, other, etc.) must also pass isValidExpenseItem validation.
+      const res = await fetch(`${base}/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inputs: {
+            ...VALID_INPUTS,
+            expenses: {
+              ...VALID_INPUTS.expenses,
+              hoa: { amount: 'not-a-number', period: 'monthly' },
             },
           },
         }),
