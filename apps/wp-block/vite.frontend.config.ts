@@ -32,8 +32,11 @@ export default defineConfig({
     cssCodeSplit: false,
     rollupOptions: {
       output: {
-        // Force CSS output to frontend.css to match block.json "style" declaration
-        assetFileNames: 'frontend[extname]',
+        // Only force CSS to frontend.css (matches block.json "viewStyle" declaration).
+        // Other assets (fonts, images, sourcemaps) keep their original hashed names
+        // to avoid filename collisions if additional assets are added later.
+        assetFileNames: (assetInfo) =>
+          assetInfo.name?.endsWith('.css') ? 'frontend[extname]' : '[name]-[hash][extname]',
       },
     },
   },

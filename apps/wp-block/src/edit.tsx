@@ -5,6 +5,9 @@
  * interactive app only renders on the frontend (see frontend.tsx).
  */
 
+// Classic JSX runtime: React must be in scope so createElement calls resolve
+// correctly when the editor build maps `react` → `wp.element` globals.
+import React from 'react';
 import type { BlockEditProps } from '@wordpress/blocks';
 
 export function Edit(_props: BlockEditProps) {
