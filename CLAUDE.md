@@ -8,20 +8,23 @@ pnpm 10 monorepo — `packages/engine` (pure calc), `packages/ui` (React 18 SPA)
 
 Follows the canonical LowerMedia strategy (`~/Library/Mobile Documents/com~apple~CloudDocs/Brain/conventions/git-strategy.md`).
 
-- **Release branch:** `v1.0.0` (current)
-- **Task branches** cut from `v1.0.0`, named exactly after the ticket handle (e.g. `RPE-24`)
+- **Release branch:** `v1.2.0` (current)
+- **Task branches** cut from `v1.2.0`, named exactly after the ticket handle (e.g. `RPE-36`)
 - **Every commit** prefixed with the ticket handle
 - **Jira project:** `RPE` at `lowermedia.atlassian.net` — cloudId `f1fa5126-9e62-47aa-897d-d6ca956bc26c`
-- **v1.0.0 Jira version ID:** `10039`
+- **v1.2.0 Jira version ID:** (assign when version is created in Jira)
 - **Transition IDs:** To Do=11, In Progress=21, In Review=31, Done=41
 
-### Copilot review exemption
+### Shipped releases
 
-This repo has **no `origin` remote configured**. The PR → Copilot review loop from the canonical strategy cannot be executed.
+| Release | Tag | squash commit on `main` |
+|---------|-----|------------------------|
+| v1.0.0  | `v1.0.0` | E1–E3: monorepo scaffold, engine, SPA, screener |
+| v1.1.0  | `v1.1.0` | E4: pro-forma mode (projection, IRR/NPV, charts) |
 
-Per the strategy's exception clause: skip the PR loop for solo repos with no deployment target. Instead, cherry-pick task commits directly onto the release branch after the local gate passes (lint + typecheck + test + build).
+### Copilot review loop
 
-**Reinstate the PR loop** the moment a remote is added (`git remote add origin <url>`).
+Origin is configured at `github.com:LowerMedia/rental-property-evaluator`. Full PR → Copilot review loop is active. Max 2 open PRs at a time.
 
 ## Gate (run before every cherry-pick)
 
@@ -29,7 +32,7 @@ Per the strategy's exception clause: skip the PR loop for solo repos with no dep
 pnpm lint && pnpm typecheck && pnpm test && pnpm build
 ```
 
-All four must pass. Tests currently: 253 tests, 8 files.
+All four must pass. Tests currently: 440 tests, 13 files.
 
 ## Tailwind CSS v4 source scanning
 
