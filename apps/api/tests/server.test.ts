@@ -148,6 +148,23 @@ describe('@rpe/api', () => {
       expect((body['error'] as string)).toContain('opts.mode');
     });
 
+    it('returns 400 when inputs.expenses is missing', async () => {
+      const res = await fetch(`${base}/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inputs: {
+            purchasePrice: 300000,
+            percentDown: 20,
+            // expenses intentionally omitted
+          },
+        }),
+      });
+      const body = await res.json() as Record<string, unknown>;
+      expect(res.status).toBe(400);
+      expect(typeof body['error']).toBe('string');
+    });
+
     it('returns 413 for oversized payloads (>64 KB)', async () => {
       // Build a body that exceeds MAX_BODY_BYTES (64 KB)
       const bigBody = JSON.stringify({ inputs: { _pad: 'x'.repeat(65 * 1024) } });
