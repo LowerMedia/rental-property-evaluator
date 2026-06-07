@@ -10,7 +10,8 @@
  * Gates:
  *   1. Context gate  — adConfig prop absent → nothing rendered, no script loaded
  *   2. Safety gate   — empty client / slot string → returns null
- *   3. Print gate    — no-print CSS class hides the slot in print/PDF output
+ *   3. Print gate    — wraps the slot in a `no-print` class; the consumer's
+ *                      CSS must define `@media print { .no-print { display:none } }`
  */
 
 import { useEffect } from 'react';
@@ -18,8 +19,8 @@ import { useEffect } from 'react';
 // Extend Window so TypeScript accepts adsbygoogle without casting.
 declare global {
   interface Window {
-    // AdSense push queue — array of config objects or empty objects.
-    adsbygoogle: Record<string, unknown>[];
+    // AdSense push queue — may be undefined until the loader script initialises.
+    adsbygoogle?: Record<string, unknown>[];
   }
 }
 
@@ -38,7 +39,7 @@ function injectLoader(client: string): void {
   const script = document.createElement('script');
   script.id = SCRIPT_ID;
   script.async = true;
-  script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${client}`;
+  script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${encodeURIComponent(client)}`;
   script.crossOrigin = 'anonymous';
   document.head.appendChild(script);
   loaderInjected = true;
