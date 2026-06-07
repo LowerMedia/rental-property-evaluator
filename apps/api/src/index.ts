@@ -287,8 +287,8 @@ async function handleEvaluate(req: IncomingMessage, res: ServerResponse): Promis
   // DealExpenses has two field categories — validate each appropriately:
   //   ExpenseInput fields (taxes, insurance, hoa, other): { amount: number, period: "monthly"|"annual" }
   //   Numeric % fields (capExPct, maintPct, mgmtPct, miscPct): finite number
-  // Note: the engine's normalizeExpenses() only returns known fields, so unrecognised keys are
-  // silently dropped — they are validated here for shape only, not forwarded verbatim.
+  // Keys outside these two sets are not validated and are silently ignored by the engine
+  // (normalizeExpenses() only maps known fields).
   const EXPENSE_ITEM_KEYS = new Set(['taxes', 'insurance', 'hoa', 'other']);
   const EXPENSE_PCT_KEYS = new Set(['capExPct', 'maintPct', 'mgmtPct', 'miscPct']);
 
