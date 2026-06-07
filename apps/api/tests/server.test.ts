@@ -1,0 +1,340 @@
+/**
+ * Integration tests for @rpe/api HTTP server (RPE-40).
+ *
+ * Starts the server on a random OS-assigned port before each suite,
+ * closes it after. Uses Node 20 built-in fetch for requests.
+ */
+
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import type { Server } from 'node:http';
+import { createApp } from '../src/index';
+
+// ── Shared valid DealInputs ────────────────────────────────────────────────────
+
+const VALID_INPUTS = {
+  purchasePrice: 300000,
+  percentDown: 20,
+  interestRate: 7,
+  loanTermYears: 30,
+  closingCosts: 0,
+  rollClosingCostsIntoLoan: false,
+  grossRent: 2200,
+  vacancyPct: 5,
+  expenses: {
+    taxes: { amount: 3600, period: 'annual' },
+    insurance: { amount: 1200, period: 'annual' },
+  },
+};
+
+// ── Test harness ──────────────────────────────────────────────────────────────
+
+describe('@rpe/api', () => {
+  let server: Server;
+  let base: string;
+
+  beforeAll(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        server = createApp();
+        // Wire the error event so a failed listen() fails fast rather than hanging.
+        server.once('error', reject);
+        server.listen(0, '127.0.0.1', () => {
+          server.off('error', reject);
+          const addr = server.address() as { port: number };
+          base = `http://127.0.0.1:${addr.port}`;
+          resolve();
+        });
+      }),
+  );
+
+  afterAll(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        server.close((err) => (err ? reject(err) : resolve()));
+      }),
+  );
+
+  // ── /health ────────────────────────────────────────────────────────────────
+
+  describe('GET /health', () => {
+    it('returns 200 with status and version', async () => {
+      const res = await fetch(`${base}/health`);
+      const body = await res.json() as Record<string, unknown>;
+      expect(res.status).toBe(200);
+      expect(body['status']).toBe('ok');
+      expect(typeof body['version']).toBe('string');
+    });
+
+    it('returns 405 for non-GET methods', async () => {
+      const res = await fetch(`${base}/health`, { method: 'POST' });
+      const body = await res.json() as Record<string, unknown>;
+      expect(res.status).toBe(405);
+      expect(typeof body['error']).toBe('string');
+    });
+  });
+
+  // ── CORS ───────────────────────────────────────────────────────────────────
+
+  describe('CORS preflight', () => {
+    it('OPTIONS /evaluate returns 204 with full CORS headers', async () => {
+      const res = await fetch(`${base}/evaluate`, {
+        method: 'OPTIONS',
+        headers: {
+          'Origin': 'http://example.com',
+          'Access-Control-Request-Method': 'POST',
+          'Access-Control-Request-Headers': 'Content-Type',
+        },
+      });
+      expect(res.status).toBe(204);
+      expect(res.headers.get('access-control-allow-origin')).toBe('*');
+      expect(res.headers.get('access-control-allow-methods')).toContain('POST');
+      expect(res.headers.get('access-control-allow-headers')).toContain('Content-Type');
+    });
+  });
+
+  // ── POST /evaluate ─────────────────────────────────────────────────────────
+
+  describe('POST /evaluate', () => {
+    it('returns 200 with screener results for valid inputs', async () => {
+      const res = await fetch(`${base}/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inputs: VALID_INPUTS }),
+      });
+      const body = await res.json() as Record<string, unknown>;
+      expect(res.status).toBe(200);
+      expect(body).toHaveProperty('results');
+      expect(typeof body['results']).toBe('object');
+    });
+
+    it('returns 200 with proforma results when opts.mode is proforma', async () => {
+      const res = await fetch(`${base}/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inputs: VALID_INPUTS, opts: { mode: 'proforma' } }),
+      });
+      const body = await res.json() as Record<string, unknown>;
+      expect(res.status).toBe(200);
+      expect(body).toHaveProperty('results');
+    });
+
+    it('returns 400 for invalid JSON', async () => {
+      const res = await fetch(`${base}/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{not valid json',
+      });
+      const body = await res.json() as Record<string, unknown>;
+      expect(res.status).toBe(400);
+      expect(typeof body['error']).toBe('string');
+    });
+
+    it('returns 400 when inputs field is missing', async () => {
+      const res = await fetch(`${base}/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notInputs: {} }),
+      });
+      const body = await res.json() as Record<string, unknown>;
+      expect(res.status).toBe(400);
+      expect(typeof body['error']).toBe('string');
+    });
+
+    it('returns 400 for invalid opts.mode', async () => {
+      const res = await fetch(`${base}/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inputs: VALID_INPUTS, opts: { mode: 'invalid' } }),
+      });
+      const body = await res.json() as Record<string, unknown>;
+      expect(res.status).toBe(400);
+      expect((body['error'] as string)).toContain('opts.mode');
+    });
+
+    it('returns 400 when opts is not an object (string)', async () => {
+      const res = await fetch(`${base}/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inputs: VALID_INPUTS, opts: 'screener' }),
+      });
+      const body = await res.json() as Record<string, unknown>;
+      expect(res.status).toBe(400);
+      expect((body['error'] as string)).toContain('opts');
+    });
+
+    it('returns 400 when rollClosingCostsIntoLoan is omitted', async () => {
+      // Engine coerces the missing boolean to false via Boolean() — should be a 400 instead.
+      const inputsWithout: Record<string, unknown> = { ...VALID_INPUTS };
+      delete inputsWithout['rollClosingCostsIntoLoan'];
+      const res = await fetch(`${base}/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inputs: inputsWithout }),
+      });
+      const body = await res.json() as Record<string, unknown>;
+      expect(res.status).toBe(400);
+      expect((body['error'] as string)).toContain('rollClosingCostsIntoLoan');
+    });
+
+    it('returns 400 when a required numeric field is non-finite', async () => {
+      // JSON parses 1e9999 as Infinity — engine would silently use it, must reject.
+      // Note: JSON.stringify(Infinity) → "null", so we build the body string directly.
+      const res = await fetch(`${base}/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{"inputs":{"purchasePrice":1e9999,"percentDown":20,"interestRate":7,"loanTermYears":30,"closingCosts":0,"rollClosingCostsIntoLoan":false,"grossRent":2200,"vacancyPct":5,"expenses":{"taxes":{"amount":3600,"period":"annual"},"insurance":{"amount":1200,"period":"annual"}}}}',
+      });
+      const body = await res.json() as Record<string, unknown>;
+      expect(res.status).toBe(400);
+      expect((body['error'] as string)).toContain('purchasePrice');
+    });
+
+    it('returns 400 when a required numeric field is null', async () => {
+      // Engine coerces null to 0 — must reject with 400 instead of silently continuing.
+      const res = await fetch(`${base}/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inputs: { ...VALID_INPUTS, purchasePrice: null } }),
+      });
+      const body = await res.json() as Record<string, unknown>;
+      expect(res.status).toBe(400);
+      expect((body['error'] as string)).toContain('purchasePrice');
+    });
+
+    it('returns 400 when rollClosingCostsIntoLoan is not a boolean', async () => {
+      // Engine coerces 0 to false via Boolean() — must reject with 400 instead.
+      const res = await fetch(`${base}/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inputs: { ...VALID_INPUTS, rollClosingCostsIntoLoan: 0 } }),
+      });
+      const body = await res.json() as Record<string, unknown>;
+      expect(res.status).toBe(400);
+      expect((body['error'] as string)).toContain('rollClosingCostsIntoLoan');
+    });
+
+    it('returns 400 when an expense period is invalid', async () => {
+      // Engine silently defaults unrecognised periods to monthly — must reject with 400.
+      const res = await fetch(`${base}/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inputs: {
+            ...VALID_INPUTS,
+            expenses: {
+              taxes: { amount: 3600, period: 'weekly' },
+              insurance: { amount: 1200, period: 'annual' },
+            },
+          },
+        }),
+      });
+      const body = await res.json() as Record<string, unknown>;
+      expect(res.status).toBe(400);
+      expect(typeof body['error']).toBe('string');
+    });
+
+    it('returns 400 when an optional expense item has an invalid shape', async () => {
+      // Optional items (hoa, other, etc.) must also pass isValidExpenseItem validation.
+      const res = await fetch(`${base}/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inputs: {
+            ...VALID_INPUTS,
+            expenses: {
+              ...VALID_INPUTS.expenses,
+              hoa: { amount: 'not-a-number', period: 'monthly' },
+            },
+          },
+        }),
+      });
+      const body = await res.json() as Record<string, unknown>;
+      expect(res.status).toBe(400);
+      expect(typeof body['error']).toBe('string');
+    });
+
+    it('returns 200 when optional numeric expense % fields are provided', async () => {
+      // capExPct, maintPct, mgmtPct, miscPct are plain finite numbers, not ExpenseInput objects.
+      // Earlier all-keys validation incorrectly rejected them — this guards against regression.
+      const res = await fetch(`${base}/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inputs: {
+            ...VALID_INPUTS,
+            expenses: {
+              ...VALID_INPUTS.expenses,
+              capExPct: 5,
+              mgmtPct: 8,
+            },
+          },
+        }),
+      });
+      const body = await res.json() as Record<string, unknown>;
+      expect(res.status).toBe(200);
+      expect(body).toHaveProperty('results');
+    });
+
+    it('returns 400 when inputs.expenses is an array', async () => {
+      // expenses must be a plain object — arrays pass typeof === 'object' but must be rejected.
+      const res = await fetch(`${base}/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inputs: { ...VALID_INPUTS, expenses: [] },
+        }),
+      });
+      const body = await res.json() as Record<string, unknown>;
+      expect(res.status).toBe(400);
+      expect(typeof body['error']).toBe('string');
+    });
+
+    it('returns 400 when inputs.expenses is missing', async () => {
+      const res = await fetch(`${base}/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inputs: {
+            purchasePrice: 300000,
+            percentDown: 20,
+            // expenses intentionally omitted
+          },
+        }),
+      });
+      const body = await res.json() as Record<string, unknown>;
+      expect(res.status).toBe(400);
+      expect(typeof body['error']).toBe('string');
+    });
+
+    it('returns 413 for oversized payloads (>64 KB)', async () => {
+      // Build a body that exceeds MAX_BODY_BYTES (64 KB)
+      const bigBody = JSON.stringify({ inputs: { _pad: 'x'.repeat(65 * 1024) } });
+      const res = await fetch(`${base}/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: bigBody,
+      });
+      const body = await res.json() as Record<string, unknown>;
+      expect(res.status).toBe(413);
+      expect(typeof body['error']).toBe('string');
+    });
+
+    it('returns 405 for non-POST methods', async () => {
+      const res = await fetch(`${base}/evaluate`, { method: 'GET' });
+      const body = await res.json() as Record<string, unknown>;
+      expect(res.status).toBe(405);
+      expect(typeof body['error']).toBe('string');
+    });
+  });
+
+  // ── 404 ────────────────────────────────────────────────────────────────────
+
+  describe('404', () => {
+    it('returns 404 for unknown paths', async () => {
+      const res = await fetch(`${base}/unknown`);
+      const body = await res.json() as Record<string, unknown>;
+      expect(res.status).toBe(404);
+      expect(typeof body['error']).toBe('string');
+    });
+  });
+});
