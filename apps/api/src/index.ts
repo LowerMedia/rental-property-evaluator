@@ -238,6 +238,7 @@ async function handleEvaluate(req: IncomingMessage, res: ServerResponse): Promis
   // Validate required top-level fields — both presence AND type.
   // Engine normalises absent/null numerics to 0 and non-boolean rollClosingCostsIntoLoan
   // via Boolean() to false, both producing misleading results without a prior 400.
+  // Non-finite numbers (Infinity, NaN) are also rejected — consistent with isValidExpenseItem.
   const REQUIRED_NUMERIC = [
     'purchasePrice', 'percentDown', 'interestRate', 'loanTermYears',
     'closingCosts', 'grossRent', 'vacancyPct',
@@ -247,7 +248,10 @@ async function handleEvaluate(req: IncomingMessage, res: ServerResponse): Promis
 
   const invalidFields: string[] = [
     ...REQUIRED_NUMERIC.filter(
-      (k) => !Object.hasOwn(rawInputs, k) || typeof rawInputs[k] !== 'number',
+      (k) =>
+        !Object.hasOwn(rawInputs, k) ||
+        typeof rawInputs[k] !== 'number' ||
+        !Number.isFinite(rawInputs[k] as number),
     ),
     ...REQUIRED_BOOLEAN.filter(
       (k) => !Object.hasOwn(rawInputs, k) || typeof rawInputs[k] !== 'boolean',
