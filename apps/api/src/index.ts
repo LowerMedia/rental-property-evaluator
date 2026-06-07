@@ -186,16 +186,17 @@ async function handleEvaluate(req: IncomingMessage, res: ServerResponse): Promis
     return;
   }
 
-  // Validate required top-level scalar fields — engine normalises missing values
-  // to 0, which produces technically valid but misleading results for a public API.
-  const REQUIRED_SCALARS = [
+  // Validate required top-level fields — engine normalises absent numerics to 0
+  // and absent booleans via Boolean() to false, both producing misleading results.
+  // rollClosingCostsIntoLoan must be present: omitting it silently becomes false.
+  const REQUIRED_FIELDS = [
     'purchasePrice', 'percentDown', 'interestRate', 'loanTermYears',
-    'closingCosts', 'grossRent', 'vacancyPct',
+    'closingCosts', 'rollClosingCostsIntoLoan', 'grossRent', 'vacancyPct',
   ] as const;
   const rawInputs = inputs as unknown as Record<string, unknown>;
-  const missingScalars = REQUIRED_SCALARS.filter((k) => !(k in rawInputs));
-  if (missingScalars.length > 0) {
-    json(res, 400, { error: `Missing required input fields: ${missingScalars.join(', ')}` });
+  const missingFields = REQUIRED_FIELDS.filter((k) => !(k in rawInputs));
+  if (missingFields.length > 0) {
+    json(res, 400, { error: `Missing required input fields: ${missingFields.join(', ')}` });
     return;
   }
 
