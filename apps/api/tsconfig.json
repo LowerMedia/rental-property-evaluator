@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "noEmit": true,
+    "paths": {
+      "@rpe/engine": ["../../packages/engine/src/index.ts"]
+    }
+  },
+  "include": ["src", "vite.config.ts"]
+}
