@@ -5,7 +5,7 @@
  * and integrations can compute deal metrics without a browser.
  *
  * Endpoints:
- *   GET  /health       → { status: 'ok', version: '0.1.0' }
+ *   GET  /health       → { status: 'ok', version: string }  // version from package.json
  *   POST /evaluate     → { results: Results }
  *
  * POST /evaluate body (JSON):
@@ -37,13 +37,22 @@
  *   HOST env var — default '0.0.0.0'
  */
 
+import { readFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { resolve } from 'node:path';
+import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { evaluate } from '@rpe/engine';
 import type { DealInputs, EvalOptions } from '@rpe/engine';
 
-const VERSION = '0.1.0';
+// Hoist __filename/__dirname for use in VERSION and the entry-point guard below.
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// VERSION is read from package.json at module-load time — single source of truth,
+// no hard-coded string to drift from the published version.
+const VERSION: string = (
+  JSON.parse(readFileSync(resolve(__dirname, '../package.json'), 'utf8')) as { version: string }
+).version;
 const MAX_BODY_BYTES = 64 * 1024; // 64 KB
 const VALID_MODES = new Set<string>(['screener', 'proforma']);
 
@@ -156,6 +165,18 @@ async function handleEvaluate(req: IncomingMessage, res: ServerResponse): Promis
     return;
   }
 
+  // Guard: opts, if present, must be a plain object — not a string, number, null, or array.
+  // Without this check, `opts: "screener"` or `opts: null` would silently pass through
+  // the mode validation and reach evaluate() with the wrong shape.
+  const rawOpts = (parsed as Record<string, unknown>)['opts'];
+  if (
+    rawOpts !== undefined &&
+    (typeof rawOpts !== 'object' || rawOpts === null || Array.isArray(rawOpts))
+  ) {
+    json(res, 400, { error: 'opts must be an object, e.g. { "mode": "screener" }' });
+    return;
+  }
+
   const { inputs, opts } = parsed as { inputs: DealInputs; opts?: EvalOptions };
 
   if (opts?.mode !== undefined && !VALID_MODES.has(opts.mode)) {
@@ -244,7 +265,6 @@ export function createApp() {
 
 // ── Entry point (skipped when imported by tests/other modules) ────────────────
 
-const __filename = fileURLToPath(import.meta.url);
 if (resolve(process.argv[1] ?? '') === __filename) {
   const port = validatePort(process.env['PORT']);
   const host = process.env['HOST'] ?? '0.0.0.0';
