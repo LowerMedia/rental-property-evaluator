@@ -159,6 +159,20 @@ describe('@rpe/api', () => {
       expect((body['error'] as string)).toContain('opts');
     });
 
+    it('returns 400 when rollClosingCostsIntoLoan is omitted', async () => {
+      // Engine coerces the missing boolean to false via Boolean() — should be a 400 instead.
+      const inputsWithout: Record<string, unknown> = { ...VALID_INPUTS };
+      delete inputsWithout['rollClosingCostsIntoLoan'];
+      const res = await fetch(`${base}/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inputs: inputsWithout }),
+      });
+      const body = await res.json() as Record<string, unknown>;
+      expect(res.status).toBe(400);
+      expect((body['error'] as string)).toContain('rollClosingCostsIntoLoan');
+    });
+
     it('returns 400 when inputs.expenses is missing', async () => {
       const res = await fetch(`${base}/evaluate`, {
         method: 'POST',
