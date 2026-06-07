@@ -165,6 +165,19 @@ async function handleEvaluate(req: IncomingMessage, res: ServerResponse): Promis
     return;
   }
 
+  // Validate required top-level scalar fields — engine normalises missing values
+  // to 0, which produces technically valid but misleading results for a public API.
+  const REQUIRED_SCALARS = [
+    'purchasePrice', 'percentDown', 'interestRate', 'loanTermYears',
+    'closingCosts', 'grossRent', 'vacancyPct',
+  ] as const;
+  const rawInputs = inputs as unknown as Record<string, unknown>;
+  const missingScalars = REQUIRED_SCALARS.filter((k) => !(k in rawInputs));
+  if (missingScalars.length > 0) {
+    json(res, 400, { error: `Missing required input fields: ${missingScalars.join(', ')}` });
+    return;
+  }
+
   // Validate required nested shape — engine throws TypeError for missing expenses.
   const expField = (inputs as unknown as Record<string, unknown>)['expenses'];
   if (
@@ -195,7 +208,7 @@ async function handleEvaluate(req: IncomingMessage, res: ServerResponse): Promis
 // ── App factory ────────────────────────────────────────────────────────────────
 
 export function createApp() {
-  return createServer(async (req: IncomingMessage, res: ServerResponse) => {
+  return createServer((req: IncomingMessage, res: ServerResponse) => {
     const url = req.url?.split('?')[0] ?? '/';
 
     // Handle CORS preflight globally before routing
@@ -210,12 +223,22 @@ export function createApp() {
       return;
     }
 
-    if (url === '/evaluate' || url === '/evaluate/') {
-      await handleEvaluate(req, res);
-      return;
-    }
+    // Route to async handlers; catch unhandled rejections so every request
+    // gets a response (createServer does not propagate Promise rejections).
+    const asyncHandler =
+      url === '/evaluate' || url === '/evaluate/'
+        ? () => handleEvaluate(req, res)
+        : () => {
+            json(res, 404, { error: `Unknown endpoint: ${url}` });
+            return Promise.resolve();
+          };
 
-    json(res, 404, { error: `Unknown endpoint: ${url}` });
+    asyncHandler().catch((err: unknown) => {
+      console.error('Unhandled request error:', err instanceof Error ? err.stack : String(err));
+      if (!res.headersSent) {
+        json(res, 500, { error: 'Internal server error' });
+      }
+    });
   });
 }
 
