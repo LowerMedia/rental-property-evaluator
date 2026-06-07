@@ -283,12 +283,6 @@ function ShareButton({ inputs }: { inputs: DealInputs }) {
 // ─── Main Evaluator ───────────────────────────────────────────────────────────
 
 /**
- * Top-level SPA component.
- *
- * Single scenario: standard two-panel layout (inputs | ResultsPanel).
- * 2–4 scenarios: ScenarioTabs on the inputs panel + ComparisonPanel on the right.
- */
-/**
  * Ad configuration for gated ad slots (RPE-39).
  * Omit entirely to render zero ad-related markup — the WP block never
  * passes this prop, keeping embedded usage completely ad-free.
@@ -300,6 +294,12 @@ export interface AdConfig {
   resultsSlot: string;
 }
 
+/**
+ * Top-level SPA component.
+ *
+ * Single scenario: standard two-panel layout (inputs | ResultsPanel).
+ * 2–4 scenarios: ScenarioTabs on the inputs panel + ComparisonPanel on the right.
+ */
 export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
   const {
     scenarios,
