@@ -148,6 +148,17 @@ describe('@rpe/api', () => {
       expect((body['error'] as string)).toContain('opts.mode');
     });
 
+    it('returns 400 when opts is not an object (string)', async () => {
+      const res = await fetch(`${base}/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inputs: VALID_INPUTS, opts: 'screener' }),
+      });
+      const body = await res.json() as Record<string, unknown>;
+      expect(res.status).toBe(400);
+      expect((body['error'] as string)).toContain('opts');
+    });
+
     it('returns 400 when inputs.expenses is missing', async () => {
       const res = await fetch(`${base}/evaluate`, {
         method: 'POST',
