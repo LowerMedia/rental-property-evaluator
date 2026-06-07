@@ -173,6 +173,50 @@ describe('@rpe/api', () => {
       expect((body['error'] as string)).toContain('rollClosingCostsIntoLoan');
     });
 
+    it('returns 400 when a required numeric field is null', async () => {
+      // Engine coerces null to 0 — must reject with 400 instead of silently continuing.
+      const res = await fetch(`${base}/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inputs: { ...VALID_INPUTS, purchasePrice: null } }),
+      });
+      const body = await res.json() as Record<string, unknown>;
+      expect(res.status).toBe(400);
+      expect((body['error'] as string)).toContain('purchasePrice');
+    });
+
+    it('returns 400 when rollClosingCostsIntoLoan is not a boolean', async () => {
+      // Engine coerces 0 to false via Boolean() — must reject with 400 instead.
+      const res = await fetch(`${base}/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inputs: { ...VALID_INPUTS, rollClosingCostsIntoLoan: 0 } }),
+      });
+      const body = await res.json() as Record<string, unknown>;
+      expect(res.status).toBe(400);
+      expect((body['error'] as string)).toContain('rollClosingCostsIntoLoan');
+    });
+
+    it('returns 400 when an expense period is invalid', async () => {
+      // Engine silently defaults unrecognised periods to monthly — must reject with 400.
+      const res = await fetch(`${base}/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inputs: {
+            ...VALID_INPUTS,
+            expenses: {
+              taxes: { amount: 3600, period: 'weekly' },
+              insurance: { amount: 1200, period: 'annual' },
+            },
+          },
+        }),
+      });
+      const body = await res.json() as Record<string, unknown>;
+      expect(res.status).toBe(400);
+      expect(typeof body['error']).toBe('string');
+    });
+
     it('returns 400 when inputs.expenses is missing', async () => {
       const res = await fetch(`${base}/evaluate`, {
         method: 'POST',
