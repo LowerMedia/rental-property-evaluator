@@ -81,6 +81,11 @@ export interface DealInputs {
   /** Marginal income tax rate in percent (for after-tax cash flow). */
   marginalTaxPct?: number;
   /**
+   * Investor's required rate of return / hurdle rate in percent (used for NPV, RPE-33).
+   * Example: 10 = 10%. When absent, NPV is not computed (null in ProFormaResults).
+   */
+  discountRatePct?: number;
+  /**
    * When true (default), CapEx reserve is included in OpEx → NOI is conservative.
    * When false, CapEx excluded from OpEx (lender convention).
    */
@@ -170,13 +175,131 @@ export interface ScreenerResults {
   fiftyPctRuleDeviation: number | null;
 }
 
+// ─── Pro-forma types (RPE-29) ─────────────────────────────────────────────────
+
 /**
- * Pro-forma results — multi-year projections, amortization, IRR/NPV, exit modeling.
- * Stub type; fully defined and implemented in RPE-E4.
+ * Single year in the multi-year hold projection (RPE-29).
+ *
+ * Row conventions:
+ *   - Annual period totals (flow values for that calendar year): grossRentAnnual,
+ *     egiAnnual, opExAnnual, noiAnnual, cashFlowAnnual, annualDebtService,
+ *     cumulativeCashFlow, and any tax/depreciation fields.
+ *   - End-of-year snapshots (point-in-time at year close): loanBalance,
+ *     propertyValue, equity.
+ *   - Rent/expense growth: Year 1 = base rates (growth factor = (1+g)^0 = 1).
+ *     Compounding begins in Year 2 and beyond.
+ *   - Property value: end-of-Year-1 = purchasePrice × (1+a)^1 (first year of appreciation applied).
+ *   - Loan balance: remaining balance at the end of that calendar year.
+ *   - Debt service: 0 for years beyond the loan term (loan fully paid off) and for cash purchases.
+ *   - % of rent expenses (capEx, maint, mgmt, misc) scale automatically with rent growth.
+ *   - Fixed dollar expenses (taxes, insurance, HOA, other) grow at expenseGrowthPct.
+ */
+export interface ProjectionYear {
+  /** 1-indexed; Year 1 = base year (end-of-year-1 values), Year N = last year of hold. */
+  year: number;
+  /** Gross potential rent for the year (base in Year 1; grows at rentGrowthPct from Year 2). */
+  grossRentAnnual: number;
+  /** EGI = (grossRent + otherIncome) × (1 − vacancy%) for the year. */
+  egiAnnual: number;
+  /** Operating expenses for the year (% components track rent; fixed components grow at expenseGrowthPct). */
+  opExAnnual: number;
+  /** NOI = egiAnnual − opExAnnual. */
+  noiAnnual: number;
+  /** Annual debt service (P&I × 12). Zero for years beyond the loan term or for cash purchases. */
+  annualDebtService: number;
+  /** Cash flow = noiAnnual − annualDebtService. */
+  cashFlowAnnual: number;
+  /** Running total of cash flows from Year 1 through this year. */
+  cumulativeCashFlow: number;
+  /** Remaining loan balance at end-of-year. 0 for cash purchases or after loan payoff. */
+  loanBalance: number;
+  /** Estimated property value at end-of-year = purchasePrice × (1 + appreciationPct/100)^year. */
+  propertyValue: number;
+  /** Equity = propertyValue − loanBalance. */
+  equity: number;
+
+  // ── Tax / depreciation (RPE-32) ────────────────────────────────────────────
+  /**
+   * Annual straight-line depreciation: (purchasePrice − landValue) / 27.5, capped at
+   * the remaining depreciable basis. Zero after the 27.5-year MACRS recovery period
+   * (typically years 28+), and zero when landValue ≥ purchasePrice.
+   */
+  depreciationAnnual: number;
+  /**
+   * Interest portion of debt service paid this year (sum of monthly amortization rows).
+   * Zero for cash purchases or for years after the loan is paid off.
+   */
+  interestPaid: number;
+  /**
+   * Simplified taxable income from property = noiAnnual − interestPaid − depreciationAnnual.
+   * Negative → "paper loss" that may shelter other income (subject to passive-activity rules
+   * outside this model). Positive → taxable rental income.
+   */
+  taxableIncome: number;
+  /**
+   * Tax savings from paper losses = max(0, −taxableIncome) × marginalTaxPct / 100.
+   * null when marginalTaxPct is not provided (taxes not modelled — render "—").
+   * Zero when taxableIncome ≥ 0.
+   * Simplified — does not apply the $25,000 passive-activity loss allowance or phase-outs.
+   */
+  taxSavings: number | null;
+  /**
+   * After-tax cash flow = cashFlowAnnual + taxSavings.
+   * null when marginalTaxPct is not provided (taxes not modelled — render "—").
+   */
+  cashFlowAfterTax: number | null;
+}
+
+/**
+ * Pro-forma results — screener snapshot + multi-year projection + hold-period summary.
  */
 export interface ProFormaResults {
   screener: ScreenerResults;
-  // Extended pro-forma fields added in RPE-E4 (multi-year, IRR, NPV, equity, exit, depreciation)
+  /** Year-by-year projections. Length = holdYears (empty array if holdYears is absent/0). */
+  projection: ProjectionYear[];
+
+  // ── Exit / sale modeling (RPE-34) ─────────────────────────────────────────
+  /**
+   * Estimated gross sale price at end of hold = lastYear.propertyValue.
+   * Null when projection is empty.
+   */
+  salePrice: number | null;
+  /**
+   * Total selling costs = salePrice × sellingCostsPct / 100.
+   * Zero when sellingCostsPct is absent or 0. Null when projection is empty.
+   */
+  sellingCosts: number | null;
+  /**
+   * Net sale proceeds = salePrice − sellingCosts − loanBalance at end of hold.
+   * This is the cash the investor walks away with after paying the agent, closing
+   * costs, and retiring the remaining mortgage. Null when projection is empty.
+   */
+  netSaleProceeds: number | null;
+  /**
+   * Total profit = Σ cashFlowAnnual (all projection years) + netSaleProceeds − totalCashInvested.
+   * The all-in dollar gain from the investment. Null when projection is empty or
+   * totalCashInvested is null/0.
+   */
+  totalProfit: number | null;
+
+  // ── Hold-period summary (RPE-33) — IRR/NPV use netSaleProceeds as terminal value ──
+  /**
+   * Annualized IRR in percent (e.g. 12.5 = 12.5 %).
+   * Cash flows: [−totalCashInvested, CF₁, CF₂, …, CF_N + netSaleProceeds].
+   * Null if projection is empty or IRR fails to converge.
+   */
+  irr: number | null;
+  /**
+   * Net Present Value of all cash flows discounted at discountRatePct.
+   * Null when discountRatePct is not provided.
+   */
+  npv: number | null;
+  /**
+   * Equity Multiple = (Σ cashFlowAnnual + netSaleProceeds) / totalCashInvested.
+   * Represents how many times the investor's capital was returned (including sale).
+   * Null when projection is empty or totalCashInvested is 0.
+   */
+  equityMultiple: number | null;
 }
 
 export type EvalMode = 'screener' | 'proforma';

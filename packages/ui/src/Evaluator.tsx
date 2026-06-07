@@ -1,6 +1,6 @@
 import { useMemo, useState, useCallback } from 'react';
-import { evaluate, SCREENER_METRIC_CONFIG } from '@rpe/engine';
-import type { DealInputs, ScreenerResults } from '@rpe/engine';
+import { evaluate, SCREENER_METRIC_CONFIG, calcLoanAmount, normalizeInputs } from '@rpe/engine';
+import type { DealInputs, ScreenerResults, ProFormaResults } from '@rpe/engine';
 import { useSavedDeals } from './hooks/useSavedDeals';
 import { useScenarios } from './hooks/useScenarios';
 import { buildShareUrl } from './utils/shareUrl';
@@ -9,6 +9,8 @@ import { DealInputsForm } from './components/inputs/DealInputsForm';
 import { SavedDealsPanel } from './components/SavedDealsPanel';
 import { ScenarioTabs } from './components/ScenarioTabs';
 import { ComparisonPanel } from './components/ComparisonPanel';
+import { AmortizationPanel } from './components/AmortizationPanel';
+import { ProFormaPanel } from './components/ProFormaPanel';
 import { fmtCurrency, fmtPercent, fmtNumber, fmtMultiplier, NULL_DISPLAY } from './utils/format';
 import type { SavedDeal } from './state/savedDealsSchema';
 
@@ -200,6 +202,48 @@ function ResultsPanel({ results }: { results: ScreenerResults }) {
   );
 }
 
+// ─── Mode toggle ─────────────────────────────────────────────────────────────
+
+interface ModeToggleProps {
+  proFormaMode: boolean;
+  onChange: (pf: boolean) => void;
+}
+
+function ModeToggle({ proFormaMode, onChange }: ModeToggleProps) {
+  return (
+    <div
+      className="flex rounded border border-border text-xs overflow-hidden"
+      role="group"
+      aria-label="Evaluation mode"
+    >
+      <button
+        type="button"
+        onClick={() => onChange(false)}
+        className={`px-3 py-1.5 uppercase tracking-widest transition-colors ${
+          !proFormaMode
+            ? 'bg-accent text-base font-semibold'
+            : 'text-lo hover:text-mid hover:bg-raised'
+        }`}
+        aria-pressed={!proFormaMode}
+      >
+        Screener
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange(true)}
+        className={`px-3 py-1.5 uppercase tracking-widest transition-colors border-l border-border ${
+          proFormaMode
+            ? 'bg-accent text-base font-semibold'
+            : 'text-lo hover:text-mid hover:bg-raised'
+        }`}
+        aria-pressed={proFormaMode}
+      >
+        Pro-Forma
+      </button>
+    </div>
+  );
+}
+
 // ─── Share button ─────────────────────────────────────────────────────────────
 
 function ShareButton({ inputs }: { inputs: DealInputs }) {
@@ -258,6 +302,27 @@ export function Evaluator() {
 
   const { deals, save, rename, remove } = useSavedDeals();
 
+  const [proFormaMode, setProFormaMode] = useState(false);
+
+  /** Seed pro-forma defaults into state the first time the user enters pro-forma mode. */
+  const handleSetProFormaMode = useCallback((pf: boolean) => {
+    setProFormaMode(pf);
+    if (pf) {
+      // Only dispatch defaults for fields that are currently undefined/absent so we
+      // don't overwrite values the user has already entered.
+      if (activeInputs.holdYears === undefined)
+        dispatchToActive({ type: 'SET_NUMBER', field: 'holdYears', value: 5 });
+      if (activeInputs.rentGrowthPct === undefined)
+        dispatchToActive({ type: 'SET_NUMBER', field: 'rentGrowthPct', value: 2 });
+      if (activeInputs.expenseGrowthPct === undefined)
+        dispatchToActive({ type: 'SET_NUMBER', field: 'expenseGrowthPct', value: 2 });
+      if (activeInputs.appreciationPct === undefined)
+        dispatchToActive({ type: 'SET_NUMBER', field: 'appreciationPct', value: 3 });
+      if (activeInputs.sellingCostsPct === undefined)
+        dispatchToActive({ type: 'SET_NUMBER', field: 'sellingCostsPct', value: 6 });
+    }
+  }, [activeInputs, dispatchToActive]);
+
   /** Evaluate all scenarios; recomputes only when scenario inputs change. */
   const resultsList = useMemo(
     () => scenarios.map((s) => evaluate(s.inputs) as ScreenerResults),
@@ -266,6 +331,20 @@ export function Evaluator() {
 
   const activeResults = resultsList[activeIdx] ?? (evaluate(activeInputs) as ScreenerResults);
   const isComparing = scenarios.length > 1;
+
+  /** Normalize active inputs once; used by AmortizationPanel and pro-forma mode. */
+  const activeNormalized = useMemo(() => normalizeInputs(activeInputs), [activeInputs]);
+  const proFormaResults = useMemo<ProFormaResults | null>(() => {
+    if (!proFormaMode) return null;
+    // Strip zero-valued optional rate fields so the engine treats them as "unset"
+    // (0 !== undefined in engine checks, but 0% tax/hurdle has no practical meaning).
+    const pfInputs: DealInputs = {
+      ...activeNormalized,
+      marginalTaxPct: activeNormalized.marginalTaxPct || undefined,
+      discountRatePct: activeNormalized.discountRatePct || undefined,
+    };
+    return evaluate(pfInputs, { mode: 'proforma' }) as ProFormaResults;
+  }, [proFormaMode, activeNormalized]);
 
   const handleLoadDeal = (deal: SavedDeal) => {
     replaceScenarioInputs(activeIdx, deal.inputs);
@@ -287,9 +366,10 @@ export function Evaluator() {
           <h1 className="font-display text-xl tracking-wide text-hi">
             Rental Property Evaluator
           </h1>
-          <span className="hidden text-xs text-lo sm:inline">Screener</span>
+          <span className="hidden text-xs text-lo sm:inline">{proFormaMode ? 'Pro-Forma' : 'Screener'}</span>
         </div>
         <div className="no-print flex items-center gap-2">
+          <ModeToggle proFormaMode={proFormaMode} onChange={handleSetProFormaMode} />
           <SavedDealsPanel
             currentInputs={activeInputs}
             deals={deals}
@@ -356,7 +436,11 @@ export function Evaluator() {
             onRename={renameScenario}
           />
           <div className="flex-1 overflow-y-auto">
-            <DealInputsForm state={activeInputs} dispatch={dispatchToActive} />
+            <DealInputsForm
+              state={activeInputs}
+              dispatch={dispatchToActive}
+              proFormaMode={proFormaMode}
+            />
           </div>
         </aside>
 
@@ -368,10 +452,19 @@ export function Evaluator() {
           aria-atomic="false"
           className="overflow-y-auto p-5"
         >
-          {isComparing ? (
+          {proFormaMode && proFormaResults ? (
+            <ProFormaPanel results={proFormaResults} purchasePrice={activeNormalized.purchasePrice} />
+          ) : isComparing ? (
             <ComparisonPanel scenarios={scenarios} resultsList={resultsList} />
           ) : (
-            <ResultsPanel results={activeResults} />
+            <div className="flex flex-col gap-4">
+              <ResultsPanel results={activeResults} />
+              <AmortizationPanel
+                loanAmount={calcLoanAmount(activeNormalized)}
+                interestRate={activeNormalized.interestRate}
+                loanTermYears={activeNormalized.loanTermYears}
+              />
+            </div>
           )}
         </section>
       </main>
