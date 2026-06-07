@@ -3,6 +3,7 @@
 
 // ── Entry component ──────────────────────────────────────────────────────────
 export { Evaluator } from './Evaluator';
+export type { AdConfig } from './Evaluator';
 
 // ── State ────────────────────────────────────────────────────────────────────
 export { dealReducer } from './state/dealReducer';
