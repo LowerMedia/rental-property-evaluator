@@ -148,6 +148,19 @@ describe('@rpe/api', () => {
       expect((body['error'] as string)).toContain('opts.mode');
     });
 
+    it('returns 413 for oversized payloads (>64 KB)', async () => {
+      // Build a body that exceeds MAX_BODY_BYTES (64 KB)
+      const bigBody = JSON.stringify({ inputs: { _pad: 'x'.repeat(65 * 1024) } });
+      const res = await fetch(`${base}/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: bigBody,
+      });
+      const body = await res.json() as Record<string, unknown>;
+      expect(res.status).toBe(413);
+      expect(typeof body['error']).toBe('string');
+    });
+
     it('returns 405 for non-POST methods', async () => {
       const res = await fetch(`${base}/evaluate`, { method: 'GET' });
       const body = await res.json() as Record<string, unknown>;

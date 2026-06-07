@@ -27,10 +27,10 @@
  *
  * Error responses:
  *   400 { error: string }  — malformed JSON, missing inputs, or invalid opts.mode
- *   405 { error: string }  — wrong HTTP method
  *   404 { error: string }  — unknown path
+ *   405 { error: string }  — wrong HTTP method
  *   413 { error: string }  — payload exceeds 64 KB
- *   500 { error: string }  — unexpected evaluation error
+ *   500 { error: string }  — unexpected evaluation error (details logged server-side)
  *
  * Configuration:
  *   PORT env var — integer 1–65535, default 3001
@@ -67,19 +67,31 @@ function json(res: ServerResponse, status: number, body: unknown): void {
   res.end(payload);
 }
 
+/**
+ * Buffer the request body up to MAX_BODY_BYTES.
+ * On oversize, drains remaining data via req.resume() (preserves keep-alive)
+ * then rejects — does NOT destroy the socket.
+ */
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let size = 0;
+    let oversized = false;
+
     req.on('data', (chunk: Buffer) => {
+      if (oversized) return;
       size += chunk.length;
       if (size > MAX_BODY_BYTES) {
-        req.destroy(new Error('Payload too large'));
+        oversized = true;
+        req.resume(); // drain without destroying the socket
+        reject(new Error('Payload too large'));
         return;
       }
       chunks.push(chunk);
     });
-    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+    req.on('end', () => {
+      if (!oversized) resolve(Buffer.concat(chunks).toString('utf8'));
+    });
     req.on('error', reject);
   });
 }
@@ -97,7 +109,8 @@ function validatePort(raw: string | undefined): number {
 // ── Route handlers ─────────────────────────────────────────────────────────────
 
 function handleHealth(req: IncomingMessage, res: ServerResponse): void {
-  if (req.method !== 'GET' && req.method !== 'HEAD') {
+  // Only GET is supported — HEAD is excluded to avoid body/no-body ambiguity.
+  if (req.method !== 'GET') {
     json(res, 405, { error: 'Method not allowed — use GET' });
     return;
   }
@@ -155,8 +168,9 @@ async function handleEvaluate(req: IncomingMessage, res: ServerResponse): Promis
     const results = evaluate(inputs, opts);
     json(res, 200, { results });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    json(res, 500, { error: `Evaluation failed: ${message}` });
+    // Log full details server-side; return a generic message to clients.
+    console.error('Evaluation error:', err instanceof Error ? err.stack : String(err));
+    json(res, 500, { error: 'Internal server error' });
   }
 }
 
