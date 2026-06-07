@@ -80,30 +80,58 @@ function json(res: ServerResponse, status: number, body: unknown): void {
 
 /**
  * Buffer the request body up to MAX_BODY_BYTES.
- * On oversize, drains remaining data via req.resume() (preserves keep-alive)
- * then rejects — does NOT destroy the socket.
+ *
+ * - Oversize: drains via req.resume() (preserves keep-alive) then rejects.
+ * - Abort / early close: rejects when the connection closes before 'end'
+ *   (req.complete is false), preventing the Promise from hanging indefinitely.
+ * - All listeners are removed once the Promise settles (no leaks).
  */
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let size = 0;
-    let oversized = false;
+    let settled = false;
 
-    req.on('data', (chunk: Buffer) => {
-      if (oversized) return;
+    const settle = (fn: () => void): void => {
+      if (settled) return;
+      settled = true;
+      req.off('data', onData);
+      req.off('end', onEnd);
+      req.off('error', onError);
+      req.off('close', onClose);
+      fn();
+    };
+
+    const onData = (chunk: Buffer): void => {
       size += chunk.length;
       if (size > MAX_BODY_BYTES) {
-        oversized = true;
-        req.resume(); // drain without destroying the socket
-        reject(new Error('Payload too large'));
+        req.resume(); // drain remaining data without destroying the socket
+        settle(() => reject(new Error('Payload too large')));
         return;
       }
       chunks.push(chunk);
-    });
-    req.on('end', () => {
-      if (!oversized) resolve(Buffer.concat(chunks).toString('utf8'));
-    });
-    req.on('error', reject);
+    };
+
+    const onEnd = (): void => {
+      settle(() => resolve(Buffer.concat(chunks).toString('utf8')));
+    };
+
+    const onError = (err: Error): void => {
+      settle(() => reject(err));
+    };
+
+    const onClose = (): void => {
+      // Fires on both normal teardown and mid-stream abort.
+      // req.complete is false when the connection closed before 'end' was received.
+      if (!req.complete) {
+        settle(() => reject(new Error('Request connection closed prematurely')));
+      }
+    };
+
+    req.on('data', onData);
+    req.on('end', onEnd);
+    req.on('error', onError);
+    req.on('close', onClose);
   });
 }
 
@@ -244,12 +272,22 @@ async function handleEvaluate(req: IncomingMessage, res: ServerResponse): Promis
     return;
   }
   const expObj = expField as Record<string, unknown>;
-  const taxItem = Object.hasOwn(expObj, 'taxes') ? expObj['taxes'] : undefined;
-  const insItem = Object.hasOwn(expObj, 'insurance') ? expObj['insurance'] : undefined;
-  if (!isValidExpenseItem(taxItem) || !isValidExpenseItem(insItem)) {
+
+  // taxes and insurance are required.
+  if (!Object.hasOwn(expObj, 'taxes') || !Object.hasOwn(expObj, 'insurance')) {
     json(res, 400, {
       error:
         'inputs.expenses must include taxes and insurance, each { amount: number, period: "monthly" | "annual" }',
+    });
+    return;
+  }
+
+  // All provided expense items (required and optional — hoa, other, etc.) must
+  // have a valid shape; the engine silently defaults bad periods to monthly.
+  const malformedExpenses = Object.keys(expObj).filter((k) => !isValidExpenseItem(expObj[k]));
+  if (malformedExpenses.length > 0) {
+    json(res, 400, {
+      error: `inputs.expenses items must each be { amount: number, period: "monthly" | "annual" }; invalid: ${malformedExpenses.join(', ')}`,
     });
     return;
   }
