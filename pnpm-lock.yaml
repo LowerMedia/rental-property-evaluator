@@ -73,14 +73,14 @@ importers:
         version: link:../../packages/engine
     devDependencies:
       '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.20
+        specifier: ^20.0.0
+        version: 20.19.42
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
       vite:
         specifier: 'catalog:'
-        version: 6.4.2(@types/node@22.19.20)(jiti@2.7.0)(lightningcss@1.32.0)
+        version: 6.4.2(@types/node@20.19.42)(jiti@2.7.0)(lightningcss@1.32.0)
 
   apps/web:
     dependencies:
@@ -774,6 +774,9 @@ packages:
 
   '@types/json-schema@7.0.15':
     resolution: {integrity: sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA==}
+
+  '@types/node@20.19.42':
+    resolution: {integrity: sha512-5L7SUaFC1RyDraj2yRhyBzHTobyXHmohD100CChNtyPyleoq37Mqab5Gn8XEKI04dfN/oqPdpHk38MgcQWHbZg==}
 
   '@types/node@22.19.20':
     resolution: {integrity: sha512-6tELRwSDYWW9EdZhbeZmYGZ1/7Djkt+Ah3/ScEYT9cDord7UJzasR/4D3VONg9tQI5CDp+/CZC1AXj2pCFOvpw==}
@@ -2652,9 +2655,14 @@ snapshots:
 
   '@types/json-schema@7.0.15': {}
 
+  '@types/node@20.19.42':
+    dependencies:
+      undici-types: 6.21.0
+
   '@types/node@22.19.20':
     dependencies:
       undici-types: 6.21.0
+    optional: true
 
   '@types/prop-types@15.7.15': {}
 
@@ -4231,6 +4239,20 @@ snapshots:
       - terser
       - tsx
       - yaml
+
+  vite@6.4.2(@types/node@20.19.42)(jiti@2.7.0)(lightningcss@1.32.0):
+    dependencies:
+      esbuild: 0.25.12
+      fdir: 6.5.0(picomatch@4.0.4)
+      picomatch: 4.0.4
+      postcss: 8.5.15
+      rollup: 4.60.4
+      tinyglobby: 0.2.16
+    optionalDependencies:
+      '@types/node': 20.19.42
+      fsevents: 2.3.3
+      jiti: 2.7.0
+      lightningcss: 1.32.0
 
   vite@6.4.2(@types/node@22.19.20)(jiti@2.7.0)(lightningcss@1.32.0):
     dependencies:
