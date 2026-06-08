@@ -130,12 +130,10 @@ const SCORED_KEYS: MetricKey[] = (
 /**
  * Scored keys visible in simple mode — intersection of SCORED_KEYS and SIMPLE_RESULT_KEYS.
  *
- * Some simple-tier metrics (e.g. totalCashInvested) have direction='none' in
- * SCREENER_METRIC_CONFIG and are therefore absent from SCORED_KEYS. As a result
- * this set has fewer entries than SIMPLE_RESULT_KEYS (currently 7, not 8).
- * That is intentional: threshold-less metrics don't contribute to the score in
- * any mode, so the simple-mode denominator correctly reflects the visible,
- * scoreable subset rather than the full 26-metric complex set.
+ * Not every simple-tier metric has a pass/fail threshold: metrics with direction='none'
+ * in SCREENER_METRIC_CONFIG (e.g. totalCashInvested) are absent from SCORED_KEYS and
+ * therefore absent here too. ScoreCard uses this set in simple mode so the score
+ * denominator reflects the visible, scoreable subset rather than the full complex set.
  */
 const SIMPLE_SCORED_KEYS: MetricKey[] = SCORED_KEYS.filter((k) =>
   SIMPLE_RESULT_KEYS.includes(k),
@@ -353,9 +351,10 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
 
   /**
    * UI complexity mode — 'simple' hides advanced inputs and results.
-   * RPE-61 adds the UiModeToggle component and wires the setter; the state
-   * is already plumbed to all consumers so RPE-61 only needs to expose the
-   * toggle — no structural changes required here.
+   * Currently passed to DealInputsForm and ResultsPanel. RPE-61 adds the
+   * UiModeToggle component and wires the setter — no structural changes
+   * required here. ComparisonPanel and ProFormaPanel are not uiMode-aware;
+   * E8 does not require them to be.
    */
   const [uiMode] = useState<UiMode>('complex');
 
