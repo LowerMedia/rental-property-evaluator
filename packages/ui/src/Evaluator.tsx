@@ -259,41 +259,53 @@ interface ModeToggleProps {
 
 function ModeToggle({ proFormaMode, onChange, disableProForma = false }: ModeToggleProps) {
   return (
-    <div
-      className="flex rounded border border-border text-xs overflow-hidden"
-      role="group"
-      aria-label="Evaluation mode"
-    >
-      <button
-        type="button"
-        onClick={() => onChange(false)}
-        className={`px-3 py-1.5 uppercase tracking-widest transition-colors ${
-          !proFormaMode
-            ? 'bg-accent text-base font-semibold'
-            : 'text-lo hover:text-mid hover:bg-raised'
-        }`}
-        aria-pressed={!proFormaMode}
+    <>
+      {/*
+        Off-screen hint referenced by aria-describedby on the disabled Pro-Forma
+        button. Browser `title` tooltips are suppressed on disabled controls in
+        many user agents and are never announced by screen readers.
+      */}
+      {disableProForma && (
+        <span id="proforma-disabled-hint" className="sr-only">
+          Pro-Forma requires Complex mode. Switch to Complex mode to enable it.
+        </span>
+      )}
+      <div
+        className="flex rounded border border-border text-xs overflow-hidden"
+        role="group"
+        aria-label="Evaluation mode"
       >
-        Screener
-      </button>
-      <button
-        type="button"
-        onClick={() => !disableProForma && onChange(true)}
-        disabled={disableProForma}
-        className={`px-3 py-1.5 uppercase tracking-widest transition-colors border-l border-border ${
-          disableProForma
-            ? 'text-lo/40 cursor-not-allowed'
-            : proFormaMode
+        <button
+          type="button"
+          onClick={() => onChange(false)}
+          className={`px-3 py-1.5 uppercase tracking-widest transition-colors ${
+            !proFormaMode
               ? 'bg-accent text-base font-semibold'
               : 'text-lo hover:text-mid hover:bg-raised'
-        }`}
-        aria-pressed={proFormaMode}
-        aria-disabled={disableProForma}
-        title={disableProForma ? 'Pro-Forma requires Complex mode' : undefined}
-      >
-        Pro-Forma
-      </button>
-    </div>
+          }`}
+          aria-pressed={!proFormaMode}
+        >
+          Screener
+        </button>
+        <button
+          type="button"
+          onClick={() => !disableProForma && onChange(true)}
+          disabled={disableProForma}
+          className={`px-3 py-1.5 uppercase tracking-widest transition-colors border-l border-border ${
+            disableProForma
+              ? 'text-lo/40 cursor-not-allowed'
+              : proFormaMode
+                ? 'bg-accent text-base font-semibold'
+                : 'text-lo hover:text-mid hover:bg-raised'
+          }`}
+          aria-pressed={proFormaMode}
+          aria-disabled={disableProForma}
+          aria-describedby={disableProForma ? 'proforma-disabled-hint' : undefined}
+        >
+          Pro-Forma
+        </button>
+      </div>
+    </>
   );
 }
 
@@ -467,7 +479,11 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
     [scenarios, uiMode],
   );
 
-  const activeResults = resultsList[activeIdx] ?? (evaluate(activeInputs) as ScreenerResults);
+  const activeResults =
+    resultsList[activeIdx] ??
+    (evaluate(
+      uiMode === 'simple' ? applySimpleBaselines(activeInputs) : activeInputs,
+    ) as ScreenerResults);
   const isComparing = scenarios.length > 1;
 
   /**
