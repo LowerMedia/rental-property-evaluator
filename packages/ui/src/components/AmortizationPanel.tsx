@@ -46,7 +46,11 @@ function AmortizationChart({ years, crossoverIdx }: ChartProps) {
         className="w-full"
         role="img"
         aria-labelledby="amort-chart-title"
+        aria-label="Amortization chart — principal vs interest per year"
       >
+        {/* <title> is the SVG-native label; aria-labelledby wires it for ARIA;
+            aria-label is kept as a fallback for ATs that don't honour
+            aria-labelledby on inline SVG. */}
         <title id="amort-chart-title">Amortization chart — principal vs interest per year</title>
         {years.map((y, i) => {
           const x = i * (barW + BAR_GAP);
