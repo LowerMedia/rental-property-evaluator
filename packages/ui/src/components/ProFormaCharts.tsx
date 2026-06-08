@@ -84,9 +84,10 @@ export function CashFlowChart({ years }: CashFlowChartProps) {
         <svg
           viewBox={`0 0 ${W} ${H + 4}`}
           className="w-full"
-          aria-label="Annual cash flow grouped bars per year"
           role="img"
+          aria-labelledby="cashflow-chart-title"
         >
+          <title id="cashflow-chart-title">Annual cash flow grouped bars per year</title>
           {/* Zero baseline */}
           <line
             x1={0} y1={zeroY}
@@ -253,9 +254,10 @@ export function EquityBuildChart({ years, purchasePrice, initialLoanBalance }: E
         <svg
           viewBox={`0 0 ${W} ${H + 4}`}
           className="w-full"
-          aria-label="Property value and equity growth over hold period"
           role="img"
+          aria-labelledby="equity-chart-title"
         >
+          <title id="equity-chart-title">Property value and equity growth over hold period</title>
           {/* Equity shaded fill */}
           <path
             d={fillPath}
