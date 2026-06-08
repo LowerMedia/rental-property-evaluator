@@ -94,3 +94,9 @@ Versioning: [SemVer](https://semver.org/) — `MAJOR.MINOR.PATCH`.
 - **Print / PDF** — `@media print` stylesheet swaps to a light theme and single-column
   layout; no JS required (RPE-28).
 - **Legacy migration shim** — reads and discards pre-monorepo localStorage shape (RPE-10).
+
+---
+
+[1.2.0]: https://github.com/LowerMedia/rental-property-evaluator/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/LowerMedia/rental-property-evaluator/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/LowerMedia/rental-property-evaluator/releases/tag/v1.0.0
