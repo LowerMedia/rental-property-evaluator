@@ -142,7 +142,7 @@ export function DealInputsForm({
       {/* ── Simple-mode assumptions note ─────────────────────────────────── */}
       {simple && (
         <div className="px-4 py-3 border-b border-border text-xs text-lo italic">
-          Financing, expenses, and property details use national-average assumptions.
+          Financing and expenses use national-average assumptions.
           Switch to Complex mode to customise.
         </div>
       )}
