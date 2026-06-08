@@ -8,6 +8,7 @@
  * Pure SVG, no external dependencies. Uses the same CSS variable tokens as the rest of the UI.
  */
 
+import { useId } from 'react';
 import type { ProjectionYear } from '@rpe/engine';
 import { fmtCurrency } from '../utils/format';
 
@@ -40,6 +41,11 @@ interface CashFlowChartProps {
 }
 
 export function CashFlowChart({ years }: CashFlowChartProps) {
+  // useId() produces a per-instance ID so multiple <Evaluator /> mounts on
+  // the same page (WP block) don't collide and break aria-labelledby.
+  const uid = useId();
+  const titleId = `${uid}-cashflow-title`;
+
   if (years.length === 0) return null;
 
   const n = years.length;
@@ -85,12 +91,12 @@ export function CashFlowChart({ years }: CashFlowChartProps) {
           viewBox={`0 0 ${W} ${H + 4}`}
           className="w-full"
           role="img"
-          aria-labelledby="cashflow-chart-title"
+          aria-labelledby={titleId}
           aria-label="Annual cash flow grouped bars per year"
         >
           {/* <title> is the SVG-native label; aria-label kept as fallback for ATs
               that don't honour aria-labelledby on inline SVG. */}
-          <title id="cashflow-chart-title">Annual cash flow grouped bars per year</title>
+          <title id={titleId}>Annual cash flow grouped bars per year</title>
           {/* Zero baseline */}
           <line
             x1={0} y1={zeroY}
@@ -195,6 +201,9 @@ interface EquityBuildChartProps {
 }
 
 export function EquityBuildChart({ years, purchasePrice, initialLoanBalance }: EquityBuildChartProps) {
+  const uid = useId();
+  const titleId = `${uid}-equity-title`;
+
   if (years.length === 0) return null;
 
   const n = years.length;
@@ -258,12 +267,12 @@ export function EquityBuildChart({ years, purchasePrice, initialLoanBalance }: E
           viewBox={`0 0 ${W} ${H + 4}`}
           className="w-full"
           role="img"
-          aria-labelledby="equity-chart-title"
+          aria-labelledby={titleId}
           aria-label="Property value and equity growth over hold period"
         >
           {/* <title> is the SVG-native label; aria-label kept as fallback for ATs
               that don't honour aria-labelledby on inline SVG. */}
-          <title id="equity-chart-title">Property value and equity growth over hold period</title>
+          <title id={titleId}>Property value and equity growth over hold period</title>
           {/* Equity shaded fill */}
           <path
             d={fillPath}
