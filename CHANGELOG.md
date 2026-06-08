@@ -73,10 +73,9 @@ Versioning: [SemVer](https://semver.org/) — `MAJOR.MINOR.PATCH`.
 ## [1.0.0] — 2026-05-25
 
 ### Added
-- **Monorepo scaffold** — pnpm 10 workspaces: `packages/engine`, `packages/ui`,
-  `apps/web`, `apps/wp-block`. Vite, React 18, TypeScript strict mode, ESLint 9 flat
-  config, Prettier, Vitest. GitHub Actions CI (lint + typecheck + test + build) (RPE-8,
-  RPE-9, RPE-11).
+- **Monorepo scaffold** — pnpm workspaces (`packages/*`, `apps/*`). Vite, React 18,
+  TypeScript strict mode, ESLint 9 flat config, Prettier, Vitest. GitHub Actions CI
+  (lint + typecheck + test + build) (RPE-8, RPE-9, RPE-11).
 - **Calc engine** (`packages/engine`) — typed `DealInputs` / `DealResults` / `DealExpenses`
   schema; input normalization, EGI, OpEx, NOI, cap rate, DSCR, CoC, PITI, GRM, and
   12+ supplementary screener metrics (LTV, debt yield, break-even, expense ratio, 50% rule,
