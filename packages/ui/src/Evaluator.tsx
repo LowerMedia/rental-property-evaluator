@@ -14,6 +14,7 @@ import { AmortizationPanel } from './components/AmortizationPanel';
 import { ProFormaPanel } from './components/ProFormaPanel';
 import { fmtCurrency, fmtPercent, fmtNumber, fmtMultiplier, NULL_DISPLAY } from './utils/format';
 import type { SavedDeal } from './state/savedDealsSchema';
+import { SIMPLE_RESULT_KEYS, type UiMode } from './state/uiMode';
 
 // ─── Metric helpers ───────────────────────────────────────────────────────────
 
@@ -117,14 +118,30 @@ function ResultGroup({ title, children }: { title: string; children: React.React
   );
 }
 
+/**
+ * All scored metric keys (direction !== 'none') — used by the full ScoreCard in complex mode.
+ */
 const SCORED_KEYS: MetricKey[] = (
   Object.entries(SCREENER_METRIC_CONFIG) as [MetricKey, (typeof SCREENER_METRIC_CONFIG)[MetricKey]][]
 )
   .filter(([, cfg]) => cfg.direction !== 'none')
   .map(([key]) => key);
 
-function ScoreCard({ result }: { result: ScreenerResults }) {
-  const signals = SCORED_KEYS.map((k) => evalSignal(k, result[k]));
+/**
+ * Scored keys visible in simple mode — intersection of SCORED_KEYS and SIMPLE_RESULT_KEYS.
+ *
+ * Not every simple-tier metric has a pass/fail threshold: metrics with direction='none'
+ * in SCREENER_METRIC_CONFIG (e.g. totalCashInvested) are absent from SCORED_KEYS and
+ * therefore absent here too. ScoreCard uses this set in simple mode so the score
+ * denominator reflects the visible, scoreable subset rather than the full complex set.
+ */
+const SIMPLE_SCORED_KEYS: MetricKey[] = SCORED_KEYS.filter((k) =>
+  SIMPLE_RESULT_KEYS.includes(k),
+);
+
+function ScoreCard({ result, uiMode = 'complex' }: { result: ScreenerResults; uiMode?: UiMode }) {
+  const scoredKeys = uiMode === 'simple' ? SIMPLE_SCORED_KEYS : SCORED_KEYS;
+  const signals = scoredKeys.map((k) => evalSignal(k, result[k]));
   const total = signals.filter((s) => s !== 'null').length;
   const passing = signals.filter((s) => s === 'pass').length;
   const pct = total > 0 ? (passing / total) * 100 : 0;
@@ -154,11 +171,14 @@ function ScoreCard({ result }: { result: ScreenerResults }) {
   );
 }
 
-function ResultsPanel({ results }: { results: ScreenerResults }) {
+function ResultsPanel({ results, uiMode = 'complex' }: { results: ScreenerResults; uiMode?: UiMode }) {
+  const simple = uiMode === 'simple';
+
   return (
     <div className="flex flex-col gap-4">
-      <ScoreCard result={results} />
+      <ScoreCard result={results} uiMode={uiMode} />
 
+      {/* ── Returns ──────────────────────────────────────────────────────────── */}
       <ResultGroup title="Returns">
         <MetricRow metricKey="capRate" result={results} />
         <MetricRow metricKey="cocRoi" result={results} />
@@ -166,38 +186,50 @@ function ResultsPanel({ results }: { results: ScreenerResults }) {
         <MetricRow metricKey="cashFlowAnnual" result={results} label="Cash Flow / yr" />
       </ResultGroup>
 
+      {/* ── Deal Quality ─────────────────────────────────────────────────────── */}
       <ResultGroup title="Deal Quality">
         <MetricRow metricKey="dscr" result={results} />
         <MetricRow metricKey="onePercentRule" result={results} label="1% Rule" />
-        <MetricRow metricKey="grm" result={results} />
-        <MetricRow metricKey="grossYield" result={results} />
+        {!simple && <MetricRow metricKey="grm" result={results} />}
+        {!simple && <MetricRow metricKey="grossYield" result={results} />}
         <MetricRow metricKey="breakEvenOccupancy" result={results} />
-        <MetricRow metricKey="expenseRatio" result={results} />
-        <MetricRow metricKey="fiftyPctRuleDeviation" result={results} label="50% Rule Dev." />
+        {!simple && <MetricRow metricKey="expenseRatio" result={results} />}
+        {!simple && <MetricRow metricKey="fiftyPctRuleDeviation" result={results} label="50% Rule Dev." />}
       </ResultGroup>
 
-      <ResultGroup title="Income & Expenses">
-        <MetricRow metricKey="egi" result={results} label="EGI / mo" />
-        <MetricRow metricKey="egiAnnual" result={results} label="EGI / yr" />
-        <MetricRow metricKey="noiMonthly" result={results} label="NOI / mo" />
-        <MetricRow metricKey="noiAnnual" result={results} label="NOI / yr" />
-        <MetricRow metricKey="opExMonthly" result={results} label="OpEx / mo" />
-        <MetricRow metricKey="opExAnnual" result={results} label="OpEx / yr" />
-        <MetricRow metricKey="piti" result={results} label="PITI / mo" />
-      </ResultGroup>
+      {/* ── Income & Expenses (complex only) ─────────────────────────────────── */}
+      {!simple && (
+        <ResultGroup title="Income & Expenses">
+          <MetricRow metricKey="egi" result={results} label="EGI / mo" />
+          <MetricRow metricKey="egiAnnual" result={results} label="EGI / yr" />
+          <MetricRow metricKey="noiMonthly" result={results} label="NOI / mo" />
+          <MetricRow metricKey="noiAnnual" result={results} label="NOI / yr" />
+          <MetricRow metricKey="opExMonthly" result={results} label="OpEx / mo" />
+          <MetricRow metricKey="opExAnnual" result={results} label="OpEx / yr" />
+          <MetricRow metricKey="piti" result={results} label="PITI / mo" />
+        </ResultGroup>
+      )}
 
-      <ResultGroup title="Loan">
-        <MetricRow metricKey="loanAmount" result={results} />
-        <MetricRow metricKey="mortgagePayment" result={results} label="P&I / mo" />
-        <MetricRow metricKey="ltv" result={results} />
-        <MetricRow metricKey="debtYield" result={results} />
-        <MetricRow metricKey="totalInterest" result={results} />
-      </ResultGroup>
+      {/* ── Loan (complex only) ──────────────────────────────────────────────── */}
+      {!simple && (
+        <ResultGroup title="Loan">
+          <MetricRow metricKey="loanAmount" result={results} />
+          <MetricRow metricKey="mortgagePayment" result={results} label="P&I / mo" />
+          <MetricRow metricKey="ltv" result={results} />
+          <MetricRow metricKey="debtYield" result={results} />
+          <MetricRow metricKey="totalInterest" result={results} />
+        </ResultGroup>
+      )}
 
+      {/* ── Capital ──────────────────────────────────────────────────────────── */}
       <ResultGroup title="Capital">
         <MetricRow metricKey="totalCashInvested" result={results} label="Total Cash In" />
-        {results.pricePerUnit !== null && <MetricRow metricKey="pricePerUnit" result={results} />}
-        {results.pricePerSqft !== null && <MetricRow metricKey="pricePerSqft" result={results} />}
+        {!simple && results.pricePerUnit !== null && (
+          <MetricRow metricKey="pricePerUnit" result={results} />
+        )}
+        {!simple && results.pricePerSqft !== null && (
+          <MetricRow metricKey="pricePerSqft" result={results} />
+        )}
       </ResultGroup>
     </div>
   );
@@ -316,6 +348,15 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
   const { deals, save, rename, remove } = useSavedDeals();
 
   const [proFormaMode, setProFormaMode] = useState(false);
+
+  /**
+   * UI complexity mode — 'simple' hides advanced inputs and results.
+   * Currently passed to DealInputsForm and ResultsPanel. RPE-61 adds the
+   * UiModeToggle component and wires the setter — no structural changes
+   * required here. ComparisonPanel and ProFormaPanel are not uiMode-aware;
+   * E8 does not require them to be.
+   */
+  const [uiMode] = useState<UiMode>('complex');
 
   /** Seed pro-forma defaults into state the first time the user enters pro-forma mode. */
   const handleSetProFormaMode = useCallback((pf: boolean) => {
@@ -453,6 +494,7 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
               state={activeInputs}
               dispatch={dispatchToActive}
               proFormaMode={proFormaMode}
+              uiMode={uiMode}
             />
           </div>
         </aside>
@@ -471,7 +513,7 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
             <ComparisonPanel scenarios={scenarios} resultsList={resultsList} />
           ) : (
             <div className="flex flex-col gap-4">
-              <ResultsPanel results={activeResults} />
+              <ResultsPanel results={activeResults} uiMode={uiMode} />
               <AmortizationPanel
                 loanAmount={calcLoanAmount(activeNormalized)}
                 interestRate={activeNormalized.interestRate}
@@ -493,3 +535,4 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
     </div>
   );
 }
+
