@@ -22,6 +22,14 @@
     <link rel="canonical" href="%VITE_APP_ORIGIN%/" />
 
     <!-- ═══════════════════════════════════════════════════════════════
+         Font preconnect — establish connections to Google Fonts early
+         so the CSS + woff2 requests don't queue behind DNS/TLS setup.
+         crossorigin is required on fonts.gstatic.com (CORS font fetch).
+         ═══════════════════════════════════════════════════════════════ -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+    <!-- ═══════════════════════════════════════════════════════════════
          Open Graph
          og:image should be a 1200×630 PNG at the canonical origin.
          ═══════════════════════════════════════════════════════════════ -->
