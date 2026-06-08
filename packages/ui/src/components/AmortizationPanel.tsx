@@ -44,9 +44,10 @@ function AmortizationChart({ years, crossoverIdx }: ChartProps) {
       <svg
         viewBox={`0 0 ${CHART_W} ${CHART_H + 24}`}
         className="w-full"
-        aria-label="Amortization chart — principal vs interest per year"
         role="img"
+        aria-labelledby="amort-chart-title"
       >
+        <title id="amort-chart-title">Amortization chart — principal vs interest per year</title>
         {years.map((y, i) => {
           const x = i * (barW + BAR_GAP);
           const denom = maxPayment > 0 ? maxPayment : 1;
