@@ -5,7 +5,7 @@
  * The panel hides itself when loanAmount ≤ 0 (cash purchase).
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { amortize } from '@rpe/engine';
 import { buildAmortizationYears, findCrossoverYear } from '../utils/amortization';
 import { fmtCurrency } from '../utils/format';
@@ -30,6 +30,12 @@ interface ChartProps {
 }
 
 function AmortizationChart({ years, crossoverIdx }: ChartProps) {
+  // useId() generates a per-instance stable ID so multiple <Evaluator /> mounts
+  // on the same page (e.g. WP block with several containers) don't produce
+  // duplicate DOM ids that would break aria-labelledby resolution.
+  const uid = useId();
+  const titleId = `${uid}-amort-chart-title`;
+
   if (years.length === 0) return null;
 
   const n = years.length;
@@ -45,13 +51,13 @@ function AmortizationChart({ years, crossoverIdx }: ChartProps) {
         viewBox={`0 0 ${CHART_W} ${CHART_H + 24}`}
         className="w-full"
         role="img"
-        aria-labelledby="amort-chart-title"
+        aria-labelledby={titleId}
         aria-label="Amortization chart — principal vs interest per year"
       >
         {/* <title> is the SVG-native label; aria-labelledby wires it for ARIA;
             aria-label is kept as a fallback for ATs that don't honour
             aria-labelledby on inline SVG. */}
-        <title id="amort-chart-title">Amortization chart — principal vs interest per year</title>
+        <title id={titleId}>Amortization chart — principal vs interest per year</title>
         {years.map((y, i) => {
           const x = i * (barW + BAR_GAP);
           const denom = maxPayment > 0 ? maxPayment : 1;
