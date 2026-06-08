@@ -1,12 +1,26 @@
 {
   "name": "@rpe/wp-block",
-  "version": "0.1.0",
+  "version": "1.2.0",
   "private": true,
-  "description": "WordPress Gutenberg block — stub for RPE-E5",
+  "description": "WordPress Gutenberg block — mounts @rpe/ui Evaluator (RPE-36)",
   "scripts": {
+    "build:editor": "vite build --config vite.editor.config.ts",
+    "build:frontend": "vite build --config vite.frontend.config.ts",
+    "build": "pnpm build:editor && pnpm build:frontend",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@rpe/ui": "workspace:*"
+  },
   "devDependencies": {
-    "typescript": "catalog:"
+    "@tailwindcss/vite": "^4.3.0",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "tailwindcss": "^4.3.0",
+    "typescript": "catalog:",
+    "vite": "catalog:"
   }
 }

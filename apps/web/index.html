@@ -3,10 +3,150 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Rental Property Evaluator</title>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         Primary SEO (RPE-38)
+         Origin is driven by VITE_APP_ORIGIN (see .env / .env.production).
+         Set VITE_APP_ORIGIN=https://your-domain.com before production build.
+         ═══════════════════════════════════════════════════════════════ -->
+    <title>Rental Property Evaluator — Screener &amp; Pro Forma Analysis</title>
+    <meta
+      name="description"
+      content="Free interactive rental property calculator. Screen deals instantly, run multi-year pro-forma projections, and compute IRR &amp; NPV before you make an offer."
+    />
+    <meta
+      name="keywords"
+      content="rental property calculator, real estate investment, cap rate, cash-on-cash return, IRR, NPV, pro forma, deal analyzer, DSCR"
+    />
+    <meta name="author" content="LowerMedia" />
+    <link rel="canonical" href="%VITE_APP_ORIGIN%/" />
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         Font preconnect — establish connections to Google Fonts early
+         so the CSS + woff2 requests don't queue behind DNS/TLS setup.
+         crossorigin is required on fonts.gstatic.com (CORS font fetch).
+         ═══════════════════════════════════════════════════════════════ -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         Open Graph
+         og:image should be a 1200×630 PNG at the canonical origin.
+         ═══════════════════════════════════════════════════════════════ -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Rental Property Evaluator" />
+    <meta
+      property="og:title"
+      content="Rental Property Evaluator — Screener &amp; Pro Forma Analysis"
+    />
+    <meta
+      property="og:description"
+      content="Free interactive rental property calculator. Screen deals, run multi-year pro-forma projections, and compute IRR &amp; NPV."
+    />
+    <meta property="og:url" content="%VITE_APP_ORIGIN%/" />
+    <meta property="og:image" content="%VITE_APP_ORIGIN%/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="Rental Property Evaluator — screener and pro-forma interface"
+    />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         Twitter / X card
+         ═══════════════════════════════════════════════════════════════ -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      name="twitter:title"
+      content="Rental Property Evaluator — Screener &amp; Pro Forma Analysis"
+    />
+    <meta
+      name="twitter:description"
+      content="Free interactive rental property calculator. Screen deals, run pro-forma, compute IRR &amp; NPV."
+    />
+    <meta name="twitter:image" content="%VITE_APP_ORIGIN%/og-image.png" />
+    <meta name="twitter:image:alt" content="Rental Property Evaluator interface" />
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         App / PWA hints
+         ═══════════════════════════════════════════════════════════════ -->
+    <meta name="application-name" content="Rental Property Evaluator" />
+    <meta name="theme-color" content="#1e3a5f" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="RPE" />
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         Structured data — WebApplication (schema.org)
+         Enables rich results in Google Search for finance tools.
+         ═══════════════════════════════════════════════════════════════ -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Rental Property Evaluator",
+        "description": "Interactive rental property calculator for screening deals and running multi-year pro-forma projections with IRR and NPV analysis.",
+        "url": "%VITE_APP_ORIGIN%/",
+        "applicationCategory": "FinanceApplication",
+        "operatingSystem": "Any",
+        "browserRequirements": "Requires JavaScript",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        },
+        "author": {
+          "@type": "Organization",
+          "name": "LowerMedia",
+          "url": "https://lowermedia.net"
+        },
+        "featureList": [
+          "Deal screener: cap rate, cash-on-cash, DSCR, GRM",
+          "Multi-year pro-forma projections",
+          "IRR and NPV analysis with hurdle rate",
+          "Amortization schedule",
+          "Scenario comparison",
+          "CSV export"
+        ]
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
+
+    <!--
+      Prerender note (RPE-38): for a single-page finance tool with no content
+      routes, this static HTML shell IS the prerender — all metadata is
+      available to crawlers without JavaScript execution. Dynamic component
+      SSR would require decoupling localStorage from the engine layer; track
+      as future work if content routes are added.
+    -->
+
+    <!-- Shown to crawlers and no-JS users -->
+    <noscript>
+      <div
+        style="
+          font-family: sans-serif;
+          max-width: 640px;
+          margin: 48px auto;
+          padding: 24px;
+          line-height: 1.6;
+          color: #1e1e1e;
+        "
+      >
+        <h1 style="margin: 0 0 12px">Rental Property Evaluator</h1>
+        <p>
+          This tool requires JavaScript for interactive calculations. Please enable JavaScript in
+          your browser to use the deal screener, pro-forma projections, and IRR/NPV analysis.
+        </p>
+        <p>
+          Features: cap rate &amp; cash-on-cash screener &mdash; multi-year pro-forma &mdash;
+          IRR/NPV with hurdle rate &mdash; amortization schedule &mdash; CSV export.
+        </p>
+      </div>
+    </noscript>
+
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

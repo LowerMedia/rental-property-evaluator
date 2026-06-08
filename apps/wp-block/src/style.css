@@ -1,0 +1,14 @@
+/**
+ * Tailwind CSS entry for the wp-block frontend bundle.
+ *
+ * Scans @rpe/ui source so all component classes are included.
+ * The compiled output is enqueued as `frontend.css` by the PHP wrapper (RPE-37).
+ */
+@import "tailwindcss";
+@source "../../../packages/ui/src";
+
+/* Block container — full width by default, respects WP alignment classes */
+[data-rpe-block="evaluator"] {
+  width: 100%;
+  box-sizing: border-box;
+}

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "rpe/evaluator",
+  "version": "1.2.0",
+  "title": "Rental Property Evaluator",
+  "category": "widgets",
+  "icon": "money-alt",
+  "description": "Interactive rental property evaluator — screener and pro-forma analysis.",
+  "keywords": ["rental", "property", "investment", "real estate", "evaluator"],
+  "textdomain": "rental-property-evaluator",
+  "editorScript": "file:./build/index.js",
+  "viewScript": "file:./build/frontend.js",
+  "viewStyle": "file:./build/frontend.css",
+  "supports": {
+    "html": false,
+    "align": ["wide", "full"]
+  },
+  "attributes": {}
+}
