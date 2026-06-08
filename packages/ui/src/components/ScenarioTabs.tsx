@@ -88,7 +88,8 @@ export function ScenarioTabs({
                 onClick={(e) => e.stopPropagation()}
                 className="
                   w-24 rounded border border-accent bg-input
-                  px-1.5 py-0 text-xs text-hi focus:outline-none
+                  px-1.5 py-0 text-xs text-hi
+                  focus:outline-none focus-visible:ring-1 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-input
                 "
               />
             ) : (
