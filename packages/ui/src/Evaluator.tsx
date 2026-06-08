@@ -128,11 +128,17 @@ const SCORED_KEYS: MetricKey[] = (
   .map(([key]) => key);
 
 /**
- * Simple-mode scored keys — intersection of SCORED_KEYS and SIMPLE_RESULT_KEYS.
- * ScoreCard uses these in simple mode so the score reflects only the visible metrics.
+ * Scored keys visible in simple mode — intersection of SCORED_KEYS and SIMPLE_RESULT_KEYS.
+ *
+ * Some simple-tier metrics (e.g. totalCashInvested) have direction='none' in
+ * SCREENER_METRIC_CONFIG and are therefore absent from SCORED_KEYS. As a result
+ * this set has fewer entries than SIMPLE_RESULT_KEYS (currently 7, not 8).
+ * That is intentional: threshold-less metrics don't contribute to the score in
+ * any mode, so the simple-mode denominator correctly reflects the visible,
+ * scoreable subset rather than the full 26-metric complex set.
  */
 const SIMPLE_SCORED_KEYS: MetricKey[] = SCORED_KEYS.filter((k) =>
-  (SIMPLE_RESULT_KEYS as readonly MetricKey[]).includes(k),
+  SIMPLE_RESULT_KEYS.includes(k),
 );
 
 function ScoreCard({ result, uiMode = 'complex' }: { result: ScreenerResults; uiMode?: UiMode }) {
