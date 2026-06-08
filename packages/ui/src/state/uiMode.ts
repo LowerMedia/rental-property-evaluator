@@ -9,10 +9,10 @@
  * - 'complex' — full experience (default): all inputs and all metrics.
  *
  * The engine always receives a fully-populated DealInputs; UiMode is a UI concern only.
- * Pro-forma mode is disabled when UiMode is 'simple' (it requires complex inputs).
+ * Disabling pro-forma mode in simple mode (it requires complex inputs) is wired in RPE-61.
  */
 
-import type { ScreenerResults } from '@rpe/engine';
+import type { DealExpenses, DealInputs, ScreenerResults } from '@rpe/engine';
 
 // ─── Mode type ────────────────────────────────────────────────────────────────
 
@@ -27,14 +27,18 @@ export type InputTier = 'simple' | 'complex';
 /**
  * Tier for every field in the input form.
  *
- * Top-level DealInputs fields use their DealInputs key.
- * DealExpenses sub-fields (capExPct, maintPct, taxes, etc.) use their DealExpenses key.
- * Pro-forma-only fields are always 'complex' (they're also gated by pro-forma mode).
+ * The key union covers:
+ *   - Every top-level DealInputs field except the `expenses` container itself.
+ *   - Every DealExpenses sub-field (including the optional `other` fixed-expense row).
+ *
+ * TypeScript enforces exhaustiveness — a missing key is a compile error.
  *
  * 'simple'  → shown in both simple and complex mode.
  * 'complex' → shown only in complex mode; in simple mode the value comes from baselines.
  */
-export const INPUT_TIER: Readonly<Record<string, InputTier>> = {
+export type InputFieldKey = Exclude<keyof DealInputs, 'expenses'> | keyof DealExpenses;
+
+export const INPUT_TIER: Readonly<Record<InputFieldKey, InputTier>> = {
   // ── Shown in simple mode ──────────────────────────────────────────────────
   purchasePrice: 'simple',
   grossRent: 'simple',
@@ -48,15 +52,16 @@ export const INPUT_TIER: Readonly<Record<string, InputTier>> = {
   rollClosingCostsIntoLoan: 'complex',
   rehab: 'complex',
   otherIncome: 'complex',
+  capExInNOI: 'complex',
   // DealExpenses sub-fields:
   capExPct: 'complex',
   maintPct: 'complex',
   mgmtPct: 'complex',
   miscPct: 'complex',
-  capExInNOI: 'complex',
   taxes: 'complex',
   insurance: 'complex',
   hoa: 'complex',
+  other: 'complex',
   // Optional property metadata:
   units: 'complex',
   sqft: 'complex',
@@ -76,8 +81,9 @@ export const INPUT_TIER: Readonly<Record<string, InputTier>> = {
 /**
  * Tier for every ScreenerResults metric.
  *
- * In simple mode only 'simple'-tier metrics are shown and included in the deal score.
- * The full set is available in complex mode (current behaviour).
+ * In simple mode only 'simple'-tier metrics are displayed. Restricting the deal
+ * score to simple-tier metrics (so it reflects only the visible metrics) is wired
+ * in RPE-60/RPE-61. The full set is available in complex mode (current behaviour).
  *
  * Simple set answers "is this deal worth pursuing?" without overwhelming a beginner:
  * cash flow, returns, loan safety, deal-quality rule-of-thumb, and capital required.
