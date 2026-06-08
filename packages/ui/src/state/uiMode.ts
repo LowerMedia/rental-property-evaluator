@@ -19,8 +19,14 @@ import type { DealExpenses, DealInputs, ScreenerResults } from '@rpe/engine';
 /** Controls form and results complexity. Orthogonal to the screener/pro-forma eval mode. */
 export type UiMode = 'simple' | 'complex';
 
-/** Tier a field or metric belongs to. */
-export type InputTier = 'simple' | 'complex';
+/**
+ * Tier that a field or metric belongs to.
+ * Used for both input fields (INPUT_TIER) and result metrics (RESULT_TIER).
+ */
+export type ComplexityTier = 'simple' | 'complex';
+
+/** @deprecated Use ComplexityTier. */
+export type InputTier = ComplexityTier;
 
 // ─── Input tiering ────────────────────────────────────────────────────────────
 
@@ -38,7 +44,7 @@ export type InputTier = 'simple' | 'complex';
  */
 export type InputFieldKey = Exclude<keyof DealInputs, 'expenses'> | keyof DealExpenses;
 
-export const INPUT_TIER: Readonly<Record<InputFieldKey, InputTier>> = {
+export const INPUT_TIER: Readonly<Record<InputFieldKey, ComplexityTier>> = {
   // ── Shown in simple mode ──────────────────────────────────────────────────
   purchasePrice: 'simple',
   grossRent: 'simple',
@@ -88,7 +94,7 @@ export const INPUT_TIER: Readonly<Record<InputFieldKey, InputTier>> = {
  * Simple set answers "is this deal worth pursuing?" without overwhelming a beginner:
  * cash flow, returns, loan safety, deal-quality rule-of-thumb, and capital required.
  */
-export const RESULT_TIER: Readonly<Record<keyof ScreenerResults, InputTier>> = {
+export const RESULT_TIER: Readonly<Record<keyof ScreenerResults, ComplexityTier>> = {
   // ── Shown in simple mode ──────────────────────────────────────────────────
   cashFlowMonthly: 'simple',
   cashFlowAnnual: 'simple',
@@ -124,7 +130,7 @@ export const RESULT_TIER: Readonly<Record<keyof ScreenerResults, InputTier>> = {
 
 /** Ordered list of result keys displayed in simple mode. */
 export const SIMPLE_RESULT_KEYS: ReadonlyArray<keyof ScreenerResults> = (
-  Object.entries(RESULT_TIER) as [keyof ScreenerResults, InputTier][]
+  Object.entries(RESULT_TIER) as [keyof ScreenerResults, ComplexityTier][]
 )
   .filter(([, tier]) => tier === 'simple')
   .map(([key]) => key);
