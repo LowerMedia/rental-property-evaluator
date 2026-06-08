@@ -1,6 +1,6 @@
 {
   "name": "@rpe/api",
-  "version": "0.1.0",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
   "description": "Thin HTTP evaluation API wrapping @rpe/engine (RPE-40)",
