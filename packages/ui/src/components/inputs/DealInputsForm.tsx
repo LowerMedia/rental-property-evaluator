@@ -16,8 +16,11 @@ export interface DealInputsFormProps {
   proFormaMode?: boolean;
   /**
    * Controls which input sections are shown.
-   * - 'simple'  — shows only Purchase Price, Down Payment, Gross Rent, and Vacancy;
-   *               all other fields are hidden and filled from baseline assumptions.
+   * - 'simple'  — shows only Purchase Price, Down Payment, Gross Rent, and Vacancy.
+   *               All other input sections are hidden. Complex-tier fields (financing,
+   *               acquisition costs, expenses) are supplied by national-average baseline
+   *               assumptions. Optional metadata (units, sqft) and pro-forma fields are
+   *               hidden and not evaluated in simple mode — they are not baselined.
    * - 'complex' — shows all sections (default, current behaviour).
    */
   uiMode?: UiMode;
@@ -142,7 +145,7 @@ export function DealInputsForm({
       {/* ── Simple-mode assumptions note ─────────────────────────────────── */}
       {simple && (
         <div className="px-4 py-3 border-b border-border text-xs text-lo italic">
-          Financing and expenses use national-average assumptions.
+          All hidden inputs use national-average assumptions.
           Switch to Complex mode to customise.
         </div>
       )}
