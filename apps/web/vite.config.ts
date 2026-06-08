@@ -14,7 +14,10 @@ export default defineConfig({
         // Split react + react-dom into a shared vendor chunk so the app
         // chunk stays small and the vendor chunk can be cached independently.
         manualChunks: {
-          'vendor-react': ['react', 'react-dom'],
+          // Include all React sub-entrypoints so Rollup routes every import
+          // (including react-dom/client used by main.tsx and the jsx runtime
+          // used by the compiler transform) into the same vendor chunk.
+          'vendor-react': ['react', 'react-dom', 'react-dom/client', 'react/jsx-runtime'],
         },
       },
     },
