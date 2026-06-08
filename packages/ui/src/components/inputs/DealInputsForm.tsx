@@ -138,7 +138,7 @@ export function DealInputsForm({
           onChange={(v) => dispatch({ type: 'SET_NUMBER', field: 'vacancyPct', value: v })}
           min={0}
           max={100}
-          hint="Applied to gross rent + other income"
+          hint={simple ? 'Applied to gross rent' : 'Applied to gross rent + other income'}
         />
       </InputSection>
 
