@@ -1,10 +1,10 @@
 /**
  * E8 — Baseline-assumptions module (RPE-58)
  *
- * Provides conservative national-average default values for every DealInputs
- * field that is hidden in simple mode. These baselines feed the engine when
- * the user has only entered the four simple-tier fields (purchase price, gross
- * rent, down %, vacancy %).
+ * Provides conservative national-average default values for the complex-tier
+ * DealInputs fields hidden in simple mode (financing, variable/fixed expenses).
+ * Optional metadata and pro-forma fields (units, sqft, holdYears, etc.) are NOT
+ * baselined — they remain undefined and are only relevant in complex mode.
  *
  * Design contract:
  *   - All baseline values are documented in BASELINE_DESCRIPTIONS.
@@ -42,6 +42,8 @@ export interface SimpleBaselineValues {
     taxes: ExpenseInput;
     insurance: ExpenseInput;
     hoa: ExpenseInput;
+    /** Other fixed expense: $0 — assumed none; explicitly present so callers need no special-case. */
+    other: ExpenseInput;
   };
 }
 
@@ -90,6 +92,8 @@ export function getSimpleBaselines(purchasePrice: number): SimpleBaselineValues 
       insurance: { amount: Math.round(pp * 0.005), period: 'annual' },
       /** HOA: $0 — assumed single-family or self-managed; user adjusts if needed. */
       hoa: { amount: 0, period: 'monthly' },
+      /** Other fixed expense: $0 — no supplemental fixed costs assumed. */
+      other: { amount: 0, period: 'monthly' },
     },
   };
 }
@@ -97,11 +101,23 @@ export function getSimpleBaselines(purchasePrice: number): SimpleBaselineValues 
 // ─── Human-readable descriptions ─────────────────────────────────────────────
 
 /**
+ * Key union covering every field in SimpleBaselineValues — derived so it stays
+ * in sync automatically when fields are added or removed.
+ */
+type BaselineDescriptionKey =
+  | Exclude<keyof SimpleBaselineValues, 'expenses'>
+  | keyof SimpleBaselineValues['expenses'];
+
+/**
  * One-sentence description of each baseline assumption.
  * Used in "based on assumptions" tooltips (RPE-61) and documentation.
  * Keys match DealInputs / DealExpenses field names.
+ *
+ * `satisfies` enforces that every BaselineDescriptionKey has a description
+ * and that no extra/unknown keys are present — missing or misspelled entries
+ * are compile errors.
  */
-export const BASELINE_DESCRIPTIONS: Readonly<Record<string, string>> = {
+export const BASELINE_DESCRIPTIONS = {
   interestRate: '30-yr fixed mortgage rate estimate (7 %).',
   loanTermYears: 'Standard 30-year loan term.',
   closingCosts: 'Buyer closing costs estimated at 2 % of purchase price.',
@@ -117,7 +133,8 @@ export const BASELINE_DESCRIPTIONS: Readonly<Record<string, string>> = {
   taxes: 'Property taxes estimated at 1.2 % of purchase price annually.',
   insurance: 'Landlord insurance estimated at 0.5 % of purchase price annually.',
   hoa: 'No HOA fees assumed.',
-};
+  other: 'No other fixed expenses assumed.',
+} as const satisfies Record<BaselineDescriptionKey, string>;
 
 // ─── Apply helper ─────────────────────────────────────────────────────────────
 
