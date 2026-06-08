@@ -1,6 +1,6 @@
 {
   "name": "@rpe/wp-block",
-  "version": "0.1.0",
+  "version": "1.2.0",
   "private": true,
   "description": "WordPress Gutenberg block — mounts @rpe/ui Evaluator (RPE-36)",
   "scripts": {
