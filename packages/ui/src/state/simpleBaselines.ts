@@ -101,8 +101,10 @@ export function getSimpleBaselines(purchasePrice: number): SimpleBaselineValues 
 // ─── Human-readable descriptions ─────────────────────────────────────────────
 
 /**
- * Key union covering every field in SimpleBaselineValues — derived so it stays
- * in sync automatically when fields are added or removed.
+ * Union of every *leaf* key in SimpleBaselineValues:
+ * - top-level keys (excluding the 'expenses' container itself)
+ * - DealExpenses sub-field keys (the leaves inside expenses)
+ * Derived from SimpleBaselineValues so it stays in sync automatically.
  */
 type BaselineDescriptionKey =
   | Exclude<keyof SimpleBaselineValues, 'expenses'>
