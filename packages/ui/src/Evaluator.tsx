@@ -15,6 +15,7 @@ import { ProFormaPanel } from './components/ProFormaPanel';
 import { fmtCurrency, fmtPercent, fmtNumber, fmtMultiplier, NULL_DISPLAY } from './utils/format';
 import type { SavedDeal } from './state/savedDealsSchema';
 import { SIMPLE_RESULT_KEYS, type UiMode } from './state/uiMode';
+import { applySimpleBaselines } from './state/simpleBaselines';
 
 // ─── Metric helpers ───────────────────────────────────────────────────────────
 
@@ -178,6 +179,18 @@ function ResultsPanel({ results, uiMode = 'complex' }: { results: ScreenerResult
     <div className="flex flex-col gap-4">
       <ScoreCard result={results} uiMode={uiMode} />
 
+      {/* ── Assumptions badge (simple mode) ──────────────────────────────────── */}
+      {simple && (
+        <div
+          className="rounded border border-border bg-raised px-4 py-2 text-xs text-lo italic"
+          role="note"
+          aria-label="Results based on assumptions"
+        >
+          Results estimated using national-average financing and expense assumptions.
+          Switch to Complex mode to use your own figures.
+        </div>
+      )}
+
       {/* ── Returns ──────────────────────────────────────────────────────────── */}
       <ResultGroup title="Returns">
         <MetricRow metricKey="capRate" result={results} />
@@ -235,43 +248,107 @@ function ResultsPanel({ results, uiMode = 'complex' }: { results: ScreenerResult
   );
 }
 
-// ─── Mode toggle ─────────────────────────────────────────────────────────────
+// ─── Mode toggles ─────────────────────────────────────────────────────────────
 
 interface ModeToggleProps {
   proFormaMode: boolean;
   onChange: (pf: boolean) => void;
+  /** When true, the Pro-Forma button is disabled (simple mode requires complex inputs). */
+  disableProForma?: boolean;
 }
 
-function ModeToggle({ proFormaMode, onChange }: ModeToggleProps) {
+function ModeToggle({ proFormaMode, onChange, disableProForma = false }: ModeToggleProps) {
+  return (
+    <>
+      {/*
+        Off-screen hint referenced by aria-describedby on the disabled Pro-Forma
+        button. Browser `title` tooltips are suppressed on disabled controls in
+        many user agents and are never announced by screen readers.
+      */}
+      {disableProForma && (
+        <span id="proforma-disabled-hint" className="sr-only">
+          Pro-Forma requires Complex mode. Switch to Complex mode to enable it.
+        </span>
+      )}
+      <div
+        className="flex rounded border border-border text-xs overflow-hidden"
+        role="group"
+        aria-label="Evaluation mode"
+      >
+        <button
+          type="button"
+          onClick={() => onChange(false)}
+          className={`px-3 py-1.5 uppercase tracking-widest transition-colors ${
+            !proFormaMode
+              ? 'bg-accent text-base font-semibold'
+              : 'text-lo hover:text-mid hover:bg-raised'
+          }`}
+          aria-pressed={!proFormaMode}
+        >
+          Screener
+        </button>
+        <button
+          type="button"
+          onClick={() => !disableProForma && onChange(true)}
+          disabled={disableProForma}
+          className={`px-3 py-1.5 uppercase tracking-widest transition-colors border-l border-border ${
+            disableProForma
+              ? 'text-lo/40 cursor-not-allowed'
+              : proFormaMode
+                ? 'bg-accent text-base font-semibold'
+                : 'text-lo hover:text-mid hover:bg-raised'
+          }`}
+          aria-pressed={proFormaMode}
+          aria-disabled={disableProForma}
+          aria-describedby={disableProForma ? 'proforma-disabled-hint' : undefined}
+        >
+          Pro-Forma
+        </button>
+      </div>
+    </>
+  );
+}
+
+interface UiModeToggleProps {
+  uiMode: UiMode;
+  onChange: (mode: UiMode) => void;
+}
+
+/**
+ * Simple / Complex mode selector.
+ * Simple mode shows 4 core inputs and 8 headline metrics; all other fields
+ * are hidden and supplied by national-average baseline assumptions.
+ */
+function UiModeToggle({ uiMode, onChange }: UiModeToggleProps) {
   return (
     <div
       className="flex rounded border border-border text-xs overflow-hidden"
       role="group"
-      aria-label="Evaluation mode"
+      aria-label="Input complexity"
     >
       <button
         type="button"
-        onClick={() => onChange(false)}
+        onClick={() => onChange('simple')}
         className={`px-3 py-1.5 uppercase tracking-widest transition-colors ${
-          !proFormaMode
+          uiMode === 'simple'
             ? 'bg-accent text-base font-semibold'
             : 'text-lo hover:text-mid hover:bg-raised'
         }`}
-        aria-pressed={!proFormaMode}
+        aria-pressed={uiMode === 'simple'}
       >
-        Screener
+        Simple
       </button>
       <button
         type="button"
-        onClick={() => onChange(true)}
+        onClick={() => onChange('complex')}
         className={`px-3 py-1.5 uppercase tracking-widest transition-colors border-l border-border ${
-          proFormaMode
+          uiMode === 'complex'
             ? 'bg-accent text-base font-semibold'
             : 'text-lo hover:text-mid hover:bg-raised'
         }`}
-        aria-pressed={proFormaMode}
+        aria-pressed={uiMode === 'complex'}
       >
-        Pro-Forma
+        Complex
       </button>
     </div>
   );
@@ -350,13 +427,23 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
   const [proFormaMode, setProFormaMode] = useState(false);
 
   /**
-   * UI complexity mode — 'simple' hides advanced inputs and results.
-   * Currently passed to DealInputsForm and ResultsPanel. RPE-61 adds the
-   * UiModeToggle component and wires the setter — no structural changes
-   * required here. ComparisonPanel and ProFormaPanel are not uiMode-aware;
-   * E8 does not require them to be.
+   * UI complexity mode — 'simple' hides advanced inputs and results and
+   * evaluates using national-average baseline assumptions for hidden fields.
+   * ComparisonPanel and ProFormaPanel are not uiMode-aware (E8 does not
+   * require them to be).
    */
-  const [uiMode] = useState<UiMode>('complex');
+  const [uiMode, setUiMode] = useState<UiMode>('complex');
+
+  /**
+   * Switch UI mode. Switching to simple also forces screener mode because
+   * pro-forma requires the complex-tier inputs that are hidden in simple mode.
+   */
+  const handleSetUiMode = useCallback((mode: UiMode) => {
+    setUiMode(mode);
+    if (mode === 'simple' && proFormaMode) {
+      setProFormaMode(false);
+    }
+  }, [proFormaMode]);
 
   /** Seed pro-forma defaults into state the first time the user enters pro-forma mode. */
   const handleSetProFormaMode = useCallback((pf: boolean) => {
@@ -377,17 +464,40 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
     }
   }, [activeInputs, dispatchToActive]);
 
-  /** Evaluate all scenarios; recomputes only when scenario inputs change. */
+  /**
+   * Evaluate all scenarios. In simple mode each scenario's inputs are run
+   * through applySimpleBaselines() first so the engine receives a fully-
+   * populated DealInputs with baseline values for all hidden complex fields.
+   */
   const resultsList = useMemo(
-    () => scenarios.map((s) => evaluate(s.inputs) as ScreenerResults),
-    [scenarios],
+    () =>
+      scenarios.map((s) =>
+        evaluate(
+          uiMode === 'simple' ? applySimpleBaselines(s.inputs) : s.inputs,
+        ) as ScreenerResults,
+      ),
+    [scenarios, uiMode],
   );
 
-  const activeResults = resultsList[activeIdx] ?? (evaluate(activeInputs) as ScreenerResults);
+  const activeResults =
+    resultsList[activeIdx] ??
+    (evaluate(
+      uiMode === 'simple' ? applySimpleBaselines(activeInputs) : activeInputs,
+    ) as ScreenerResults);
   const isComparing = scenarios.length > 1;
 
-  /** Normalize active inputs once; used by AmortizationPanel and pro-forma mode. */
-  const activeNormalized = useMemo(() => normalizeInputs(activeInputs), [activeInputs]);
+  /**
+   * Normalize the active inputs once. In simple mode the baseline-applied
+   * inputs are used so AmortizationPanel and pro-forma calculations reflect
+   * the same assumptions as the results panel.
+   */
+  const activeNormalized = useMemo(
+    () =>
+      normalizeInputs(
+        uiMode === 'simple' ? applySimpleBaselines(activeInputs) : activeInputs,
+      ),
+    [activeInputs, uiMode],
+  );
   const proFormaResults = useMemo<ProFormaResults | null>(() => {
     if (!proFormaMode) return null;
     // Strip zero-valued optional rate fields so the engine treats them as "unset"
@@ -423,7 +533,12 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
           <span className="hidden text-xs text-lo sm:inline">{proFormaMode ? 'Pro-Forma' : 'Screener'}</span>
         </div>
         <div className="no-print flex items-center gap-2">
-          <ModeToggle proFormaMode={proFormaMode} onChange={handleSetProFormaMode} />
+          <UiModeToggle uiMode={uiMode} onChange={handleSetUiMode} />
+          <ModeToggle
+            proFormaMode={proFormaMode}
+            onChange={handleSetProFormaMode}
+            disableProForma={uiMode === 'simple'}
+          />
           <SavedDealsPanel
             currentInputs={activeInputs}
             deals={deals}
