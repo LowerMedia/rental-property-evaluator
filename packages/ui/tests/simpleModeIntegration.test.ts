@@ -126,6 +126,10 @@ describe('engine parity', () => {
     const baselines = getSimpleBaselines(USER_SIMPLE_INPUTS.purchasePrice);
 
     // Build the equivalent complex-mode inputs by manually applying every baseline value.
+    // NOTE: vacancyPct is a simple-tier/user-controlled field — applySimpleBaselines()
+    // preserves the user's value, so we use USER_SIMPLE_INPUTS.vacancyPct here (already
+    // present via the ...USER_SIMPLE_INPUTS spread) rather than baselines.vacancyPct.
+    // Setting it to the baseline value would only coincidentally work when both are equal.
     const complexInputs = {
       ...DEFAULT_INPUTS,
       ...USER_SIMPLE_INPUTS,
@@ -135,7 +139,7 @@ describe('engine parity', () => {
       rollClosingCostsIntoLoan: baselines.rollClosingCostsIntoLoan,
       rehab: baselines.rehab,
       otherIncome: baselines.otherIncome,
-      vacancyPct: baselines.vacancyPct,
+      // vacancyPct: user's value (from ...USER_SIMPLE_INPUTS above, not baselines)
       capExInNOI: baselines.capExInNOI,
       expenses: {
         ...DEFAULT_INPUTS.expenses,
