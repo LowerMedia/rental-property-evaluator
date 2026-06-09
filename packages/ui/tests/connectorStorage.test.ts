@@ -52,7 +52,8 @@ describe('connectorStorage', () => {
   });
 
   it('getRentCastKey returns null when localStorage throws', () => {
-    const broken = { ...localStorage, getItem: () => { throw new Error('denied'); } };
+    const broken = new LocalStorageMock();
+    broken.getItem = () => { throw new Error('denied'); };
     vi.stubGlobal('localStorage', broken);
     expect(getRentCastKey()).toBeNull();
   });

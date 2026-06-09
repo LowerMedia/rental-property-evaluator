@@ -12,7 +12,8 @@ const STORAGE_KEY = 'rpe:connectors:rentcast';
 
 export function getRentCastKey(): string | null {
   try {
-    return localStorage.getItem(STORAGE_KEY);
+    const value = localStorage.getItem(STORAGE_KEY);
+    return value !== null && value.trim() !== '' ? value : null;
   } catch {
     // localStorage unavailable (private browsing, SSR, etc.)
     return null;
@@ -20,8 +21,10 @@ export function getRentCastKey(): string | null {
 }
 
 export function setRentCastKey(key: string): void {
+  const trimmed = key.trim();
+  if (!trimmed) return;
   try {
-    localStorage.setItem(STORAGE_KEY, key);
+    localStorage.setItem(STORAGE_KEY, trimmed);
   } catch {
     // Silently ignore — storage quota exceeded or unavailable
   }
