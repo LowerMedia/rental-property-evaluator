@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@rpe/engine": "workspace:*",
+    "@rpe/region-defaults": "workspace:*",
     "@rpe/rentcast": "workspace:*"
   },
   "devDependencies": {
