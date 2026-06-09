@@ -143,5 +143,13 @@ describe('fetchPropertyData', () => {
         (e: unknown) => e instanceof RentCastError && e.code === 'rate_limit',
       );
     });
+
+    it('throws RentCastError unknown when fetch rejects with a network error', async () => {
+      vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('Failed to fetch'));
+
+      await expect(fetchPropertyData('123 Main St', 'key')).rejects.toSatisfy(
+        (e: unknown) => e instanceof RentCastError && e.code === 'unknown',
+      );
+    });
   });
 });
