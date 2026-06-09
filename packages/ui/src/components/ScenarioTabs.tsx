@@ -6,6 +6,8 @@ interface ScenarioTabsProps {
   activeIdx: number;
   onSelect: (idx: number) => void;
   onAdd: () => void;
+  /** Load the golden Example deal as a new scenario (RPE-68). */
+  onAddExample: () => void;
   onRemove: (idx: number) => void;
   onRename: (idx: number, name: string) => void;
 }
@@ -15,6 +17,7 @@ export function ScenarioTabs({
   activeIdx,
   onSelect,
   onAdd,
+  onAddExample,
   onRemove,
   onRename,
 }: ScenarioTabsProps) {
@@ -138,6 +141,23 @@ export function ScenarioTabs({
           </button>
         );
       })}
+
+      {/* Load Example button (RPE-68) */}
+      {canAdd && (
+        <button
+          type="button"
+          onClick={onAddExample}
+          className="
+            flex items-center justify-center px-2 py-2 shrink-0
+            text-lo hover:text-accent hover:bg-raised
+            border-b border-border transition-colors text-xs
+          "
+          title="Load the Example deal (golden verification fixture)"
+          aria-label="Load Example scenario"
+        >
+          ★
+        </button>
+      )}
 
       {/* Add scenario button */}
       {canAdd && (
