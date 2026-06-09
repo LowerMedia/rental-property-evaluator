@@ -11,12 +11,12 @@ import type { Server } from 'node:http';
 import { createApp } from '../src/index';
 
 // ── Module mock — must be hoisted (vi.mock is hoisted above imports at transform time)
-vi.mock('../src/services/hud', () => ({
+vi.mock('../src/services/hud.js', () => ({
   fetchHudSafmr: vi.fn(),
 }));
 
 // Import mock AFTER vi.mock declaration so we can control it per-test
-import { fetchHudSafmr } from '../src/services/hud';
+import { fetchHudSafmr } from '../src/services/hud.js';
 const mockFetchHudSafmr = vi.mocked(fetchHudSafmr);
 
 // ─── Server lifecycle ─────────────────────────────────────────────────────────

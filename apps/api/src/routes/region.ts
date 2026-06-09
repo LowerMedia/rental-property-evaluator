@@ -33,10 +33,8 @@
  * HUD SAFMR API:
  *   Requires env var HUD_TOKEN (free at https://www.huduser.gov/portal/dataset/fmr-api.html).
  *   If HUD_TOKEN is absent, rent data is omitted (static-only response).
- *   HUD SAFMR ZIP FMR endpoint:
- *     GET https://www.huduser.gov/hudapi/public/fmr/statedata/{stateCode}
- *   We use the ZIP query:
- *     GET https://www.huduser.gov/hudapi/public/fmr/data/{zip}
+ *   Endpoint used: GET https://www.huduser.gov/hudapi/public/fmr/data/{zip}
+ *   Returns state code, county, town, and Small Area FMR by bedroom count.
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -88,9 +86,12 @@ export async function handleRegion(
             : zip;
           rent = hudResult.rent;
         }
-      } catch {
+      } catch (hudErr) {
         // HUD call failed — degrade to static defaults with empty stateCode
-        console.error('/region: HUD SAFMR fetch failed, falling back to national defaults');
+        console.error(
+          '/region: HUD SAFMR fetch failed, falling back to national defaults:',
+          hudErr instanceof Error ? hudErr.message : String(hudErr),
+        );
       }
     }
 
