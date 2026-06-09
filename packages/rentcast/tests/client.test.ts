@@ -191,6 +191,23 @@ describe('fetchPropertyData', () => {
       });
     });
 
+    it('throws RentCastError unknown when /avm/value returns null body (HTTP 200)', async () => {
+      vi.spyOn(globalThis, 'fetch').mockImplementation((url) => {
+        const u = String(url);
+        if (u.includes('/avm/value')) {
+          return Promise.resolve(new Response(JSON.stringify(null), { status: 200 }));
+        }
+        if (u.includes('/avm/rent')) {
+          return Promise.resolve(new Response(JSON.stringify(AVM_RENT_RESPONSE), { status: 200 }));
+        }
+        return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }));
+      });
+      await expect(fetchPropertyData('123 Main St', 'key')).rejects.toMatchObject({
+        code: 'unknown',
+        message: expect.stringContaining('AVM value shape'),
+      });
+    });
+
     it('throws RentCastError unknown when /properties returns a non-array body', async () => {
       vi.spyOn(globalThis, 'fetch').mockImplementation((url) => {
         const u = String(url);
