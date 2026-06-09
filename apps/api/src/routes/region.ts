@@ -7,7 +7,8 @@
  *   {
  *     zip:              string,   // input ZIP5
  *     stateCode:        string,   // 2-letter US state code ('' if unresolved)
- *     label:            string,   // human-readable e.g. 'TX · 78701'
+ *     label:            string,   // human-readable e.g. 'Austin, TX (78701)' when HUD
+ *                                 // resolves a town/county, 'TX · 78701' otherwise
  *     propertyTaxRate:  number,   // 0–1 effective rate
  *     insuranceRate:    number,   // 0–1 annual premium as % of purchase price
  *     vacancyRate:      number,   // 0–1
