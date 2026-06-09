@@ -20,20 +20,26 @@ export interface HudSafmrResult {
   };
 }
 
+interface HudRentRow {
+  Efficiency?: number | null;
+  One_Bedroom?: number | null;
+  Two_Bedroom?: number | null;
+  Three_Bedroom?: number | null;
+  Four_Bedroom?: number | null;
+}
+
 interface HudApiResponse {
   data?: {
     state?: unknown;
     county?: unknown;
     town?: unknown;
-    basicdata?: Array<{
-      Efficiency?: number | null;
-      One_Bedroom?: number | null;
-      Two_Bedroom?: number | null;
-      Three_Bedroom?: number | null;
-      Four_Bedroom?: number | null;
-    }>;
+    /** Array of ZIP rows in SAFMR metros; a single object for metro-wide FMR areas. */
+    basicdata?: HudRentRow | HudRentRow[];
   };
 }
+
+/** Abort the HUD request if it takes longer than this — a hung upstream must not block /region. */
+const HUD_TIMEOUT_MS = 10_000;
 
 /**
  * Fetch HUD SAFMR data for a ZIP5 code.
@@ -50,9 +56,13 @@ export async function fetchHudSafmr(
     const url = `https://www.huduser.gov/hudapi/public/fmr/data/${encodeURIComponent(zip)}`;
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${hudToken}` },
+      signal: AbortSignal.timeout(HUD_TIMEOUT_MS),
     });
 
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.error(`hud: SAFMR fetch for ${zip} returned HTTP ${res.status}`);
+      return null;
+    }
 
     const body = (await res.json()) as HudApiResponse;
     const data = body.data;
@@ -62,7 +72,9 @@ export async function fetchHudSafmr(
     const town = typeof data.town === 'string' ? data.town : '';
     const county = typeof data.county === 'string' ? data.county : '';
 
-    const row = data.basicdata?.[0];
+    // basicdata is an array of ZIP rows in SAFMR metros but a single object
+    // for metro-wide FMR areas — accept both shapes
+    const row = Array.isArray(data.basicdata) ? data.basicdata[0] : data.basicdata;
     return {
       stateCode,
       town,
@@ -75,7 +87,13 @@ export async function fetchHudSafmr(
         fourBed: typeof row?.Four_Bedroom === 'number' ? row.Four_Bedroom : null,
       },
     };
-  } catch {
+  } catch (err) {
+    // Timeout, network failure, or non-JSON body — log with context so HUD
+    // outages are diagnosable, then degrade gracefully (contract: null on failure)
+    console.error(
+      `hud: SAFMR fetch for ${zip} failed:`,
+      err instanceof Error ? err.message : String(err),
+    );
     return null;
   }
 }
