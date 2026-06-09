@@ -26,7 +26,8 @@ export interface LocationInputProps {
  * 2. Unresolved/empty: shows a ZIP5 text input + "Set" button.
  * 3. Resolving: input disabled, loading indicator shown.
  *
- * Accepts either plain ZIP5 ("78701") or "City, ST XXXXX" (the ZIP is extracted).
+ * Accepts plain ZIP5 ("78701"), ZIP+4 ("78701-1234", the +4 is dropped),
+ * or "City, ST XXXXX" / "City, ST XXXXX-XXXX" (the ZIP5 is extracted).
  */
 export function LocationInput({
   zip,
@@ -48,8 +49,10 @@ export function LocationInput({
     if (/^\d+$/.test(trimmed)) {
       return /^\d{5}$/.test(trimmed) ? trimmed : '';
     }
-    // "City, ST XXXXX" format: trailing ZIP5 must be preceded by a non-digit
-    const match = trimmed.match(/(?:[^\d])(\d{5})$/);
+    // ZIP+4 or "City, ST XXXXX[-XXXX]": trailing ZIP5 (optionally +4, which is
+    // dropped) must start the string or be preceded by a non-digit — never
+    // extract a ZIP from a longer digit run ("City, ST 123456" → '')
+    const match = trimmed.match(/(?:^|[^\d])(\d{5})(?:-\d{4})?$/);
     return match ? (match[1] ?? '') : '';
   };
 
