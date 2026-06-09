@@ -30,3 +30,13 @@ export {
 
 export { parseListingText } from './pasteText';
 export { createPasteTextProvider } from './providers/pasteTextProvider';
+
+export {
+  mapLookupToDealInputs,
+  applyLookupPatches,
+  type DealInputPatch,
+  type DealPatchTarget,
+  type DealPatchValue,
+  type MappedLookup,
+  type ApplyResult,
+} from './mapToDealInputs';
