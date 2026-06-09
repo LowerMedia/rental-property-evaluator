@@ -150,7 +150,16 @@ const SIMPLE_SCORED_KEYS: MetricKey[] = SCORED_KEYS.filter((k) =>
   SIMPLE_RESULT_KEYS.includes(k),
 );
 
+/** Threshold display: "≥ 5%", "≤ 12×", "≥ $0" — driven entirely by config. */
+function fmtThreshold(cfg: (typeof SCREENER_METRIC_CONFIG)[MetricKey]): string {
+  const symbol = cfg.direction === 'higher' ? '≥' : '≤';
+  const t = cfg.threshold ?? 0;
+  const value = cfg.unit === '$' ? `$${t.toLocaleString()}` : `${t}${cfg.unit ?? ''}`;
+  return `${symbol} ${value}`;
+}
+
 function ScoreCard({ result, uiMode = 'complex' }: { result: ScreenerResults; uiMode?: UiMode }) {
+  const [explainOpen, setExplainOpen] = useState(false);
   const scoredKeys = uiMode === 'simple' ? SIMPLE_SCORED_KEYS : SCORED_KEYS;
   const signals = scoredKeys.map((k) => evalSignal(k, result[k]));
   const total = signals.filter((s) => s !== 'null').length;
@@ -178,6 +187,42 @@ function ScoreCard({ result, uiMode = 'complex' }: { result: ScreenerResults; ui
         />
       </div>
       <p className="text-[10px] text-lo mt-1.5">metrics meeting conventional thresholds</p>
+
+      {/* ── Score explanation disclosure (RPE-70) — never printed ───────────── */}
+      <button
+        type="button"
+        onClick={() => setExplainOpen((open) => !open)}
+        aria-expanded={explainOpen}
+        aria-controls="score-explanation"
+        className="no-print mt-2 text-[10px] text-lo hover:text-accent transition-colors"
+      >
+        {explainOpen ? '▾' : '▸'} How is this scored?
+      </button>
+      {explainOpen && (
+        <div id="score-explanation" className="no-print mt-2 space-y-1">
+          {scoredKeys.map((key) => {
+            const cfg = SCREENER_METRIC_CONFIG[key];
+            const signal = evalSignal(key, result[key]);
+            return (
+              <div key={key} className="grid grid-cols-[1fr_auto_auto] gap-2 text-[10px] items-baseline">
+                <span className="text-mid">{cfg.label}</span>
+                <span className="text-lo font-mono">{fmtThreshold(cfg)}</span>
+                <span
+                  className={
+                    signal === 'pass' ? 'text-pass' : signal === 'fail' ? 'text-fail' : 'text-lo'
+                  }
+                >
+                  {signal === 'pass' ? 'pass' : signal === 'fail' ? 'fail' : '—'}
+                </span>
+              </div>
+            );
+          })}
+          <p className="text-[10px] text-lo pt-1 border-t border-border">
+            Score = passing ÷ scored. ≥75% green, ≥50% amber, below red. Informational
+            metrics (no threshold) are not counted.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
