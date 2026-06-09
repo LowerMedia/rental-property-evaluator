@@ -118,6 +118,20 @@ describe('applyLookupPatches', () => {
     expect(result.inputs.expenses.insurance).toEqual({ amount: 1_900, period: 'annual' });
   });
 
+  it('does not report a kind-mismatched patch as applied', () => {
+    const malformed = [{
+      target: 'purchasePrice',
+      value: { kind: 'expense', amount: 100, period: 'annual' },
+      source: 'paste',
+      confidence: 'low',
+      needsReview: true,
+    }] as unknown as Parameters<typeof applyLookupPatches>[1];
+
+    const result = applyLookupPatches(baseInputs(), malformed);
+    expect(result.inputs.purchasePrice).toBe(0);
+    expect(result.applied).toHaveLength(0);
+  });
+
   it('handles an empty patch list as a no-op copy', () => {
     const inputs = baseInputs();
     const result = applyLookupPatches(inputs, []);
