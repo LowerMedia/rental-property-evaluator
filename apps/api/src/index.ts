@@ -51,6 +51,7 @@ import {
   type ContextSuccessBody,
 } from './routes/propertyContext.js';
 import { handleRegion } from './routes/region.js';
+import { handleScrape, type ScrapeDeps, type ScrapeSuccessBody } from './routes/scrape.js';
 import { RateLimiter, TtlCache } from './services/guardrails.js';
 
 // Hoist __filename/__dirname for use in VERSION and the entry-point guard below.
@@ -357,6 +358,14 @@ export interface AppConfig {
     rpm?: number;
     dailyCap?: number;
   };
+  /** /scrape fallback (RPE-51). OFF unless RPE_SCRAPE_ENABLED=1/true —
+   * enabling in production is a product/legal call. Env: RPE_SCRAPE_RPM
+   * (default 5), RPE_SCRAPE_DAILY_CAP (default 50). */
+  scrape?: {
+    enabled?: boolean;
+    rpm?: number;
+    dailyCap?: number;
+  };
 }
 
 function envInt(name: string, fallback: number): number {
@@ -384,6 +393,19 @@ export function createApp(config: AppConfig = {}) {
       config.property?.cacheTtlMs ?? envInt('RPE_PROPERTY_CACHE_TTL_MS', 24 * 60 * 60 * 1000),
     ),
     limiter: propertyDeps.limiter,
+  };
+
+  const scrapeDeps: ScrapeDeps = {
+    enabled:
+      config.scrape?.enabled ??
+      ['1', 'true'].includes((process.env['RPE_SCRAPE_ENABLED'] ?? '').toLowerCase()),
+    cache: new TtlCache<ScrapeSuccessBody>(
+      config.property?.cacheTtlMs ?? envInt('RPE_PROPERTY_CACHE_TTL_MS', 24 * 60 * 60 * 1000),
+    ),
+    limiter: new RateLimiter(
+      config.scrape?.rpm ?? envInt('RPE_SCRAPE_RPM', 5),
+      config.scrape?.dailyCap ?? envInt('RPE_SCRAPE_DAILY_CAP', 50),
+    ),
   };
 
   // Address geometry does not move — geocode answers cache on the same
@@ -426,6 +448,8 @@ export function createApp(config: AppConfig = {}) {
         ? () => handleRegion(req, res, json)
         : url === '/geocode' || url === '/geocode/'
         ? () => handleGeocode(req, res, json, geocodeDeps)
+        : url === '/scrape' || url === '/scrape/'
+        ? () => handleScrape(req, res, json, readBody, scrapeDeps)
         : () => {
             json(res, 404, { error: `Unknown endpoint: ${url}` });
             return Promise.resolve();
