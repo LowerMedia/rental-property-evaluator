@@ -95,7 +95,6 @@ describe('getSimpleBaselines — with LocationRateOverrides', () => {
   const TX_OVERRIDES: LocationRateOverrides = {
     propertyTaxRate: 0.018,
     insuranceRate: 0.0123,
-    vacancyRate: 0.08,
     sourceLabel: 'TX state averages',
   };
 
@@ -111,9 +110,9 @@ describe('getSimpleBaselines — with LocationRateOverrides', () => {
     expect(b.expenses.insurance.period).toBe('annual');
   });
 
-  it('converts override vacancyRate (0–1) to vacancyPct (%)', () => {
+  it('vacancyPct stays at the 5 % baseline regardless of overrides (user-controlled field)', () => {
     const b = getSimpleBaselines(300_000, TX_OVERRIDES);
-    expect(b.vacancyPct).toBe(8.0);
+    expect(b.vacancyPct).toBe(5);
   });
 
   it('overrides do not affect static fields', () => {
@@ -210,7 +209,6 @@ describe('applySimpleBaselines — with LocationRateOverrides', () => {
   const TX_OVERRIDES: LocationRateOverrides = {
     propertyTaxRate: 0.018,
     insuranceRate: 0.0123,
-    vacancyRate: 0.08,
     sourceLabel: 'TX state averages',
   };
 
@@ -226,10 +224,11 @@ describe('applySimpleBaselines — with LocationRateOverrides', () => {
     expect(r.expenses.insurance.amount).toBe(Math.round(300_000 * 0.0123)); // 3690
   });
 
-  it("user's visible vacancyPct takes precedence over override vacancyRate", () => {
-    // vacancyPct is a simple-tier field — the user owns it; override.vacancyRate is baseline only
+  it("user's visible vacancyPct is used regardless of overrides", () => {
+    // vacancyPct is a simple-tier field the user owns — overrides carry no
+    // vacancy data (see LocationRateOverrides docs)
     const r = applySimpleBaselines(inputs, TX_OVERRIDES);
-    expect(r.vacancyPct).toBe(6); // from inputs, not 8 from TX_OVERRIDES.vacancyRate
+    expect(r.vacancyPct).toBe(6);
   });
 
   it('without overrides uses national-average tax and insurance', () => {
