@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { getRentCastKey, setRentCastKey, clearRentCastKey } from '../src/state/connectorStorage';
+import { getRentCastKey, setRentCastKey, clearRentCastKey, STORAGE_KEY } from '../src/state/connectorStorage';
 
 // ─── localStorage stub ────────────────────────────────────────────────────────
 
@@ -53,12 +53,12 @@ describe('connectorStorage', () => {
 
   it('getRentCastKey trims and returns null for whitespace-only stored value', () => {
     // Directly set a whitespace-only value to simulate legacy storage
-    localStorage.setItem('rpe:connectors:rentcast', '   ');
+    localStorage.setItem(STORAGE_KEY, '   ');
     expect(getRentCastKey()).toBeNull();
   });
 
   it('getRentCastKey trims surrounding whitespace from stored value', () => {
-    localStorage.setItem('rpe:connectors:rentcast', '  rc_live_abc  ');
+    localStorage.setItem(STORAGE_KEY, '  rc_live_abc  ');
     expect(getRentCastKey()).toBe('rc_live_abc');
   });
 

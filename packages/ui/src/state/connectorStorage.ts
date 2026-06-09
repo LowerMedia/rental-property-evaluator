@@ -8,7 +8,7 @@
  * except the user's own API calls to RentCast.
  */
 
-const STORAGE_KEY = 'rpe:connectors:rentcast';
+export const STORAGE_KEY = 'rpe:connectors:rentcast';
 
 export function getRentCastKey(): string | null {
   try {
