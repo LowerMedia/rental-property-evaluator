@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { getRentCastKey, setRentCastKey, clearRentCastKey } from '../state/connectorStorage';
 
 interface ConnectorSettingsModalProps {
@@ -13,9 +13,16 @@ interface ConnectorSettingsModalProps {
  * Designed to grow: additional settings (dark mode, etc.) slot in below.
  */
 export function ConnectorSettingsModal({ onClose }: ConnectorSettingsModalProps) {
+  const titleId = useId();
   const [storedKey, setStoredKey] = useState<string | null>(() => getRentCastKey());
   const [inputValue, setInputValue]   = useState('');
   const [isEditing, setIsEditing]     = useState(storedKey === null);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [onClose]);
 
   const handleSave = () => {
     const trimmed = inputValue.trim();
@@ -50,12 +57,12 @@ export function ConnectorSettingsModal({ onClose }: ConnectorSettingsModalProps)
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       role="dialog"
       aria-modal="true"
-      aria-label="Settings"
+      aria-labelledby={titleId}
     >
       <div className="w-full max-w-md rounded-lg border border-border bg-base shadow-xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
-          <h2 className="text-sm font-semibold text-hi">Settings</h2>
+          <h2 id={titleId} className="text-sm font-semibold text-hi">Settings</h2>
           <button
             type="button"
             onClick={onClose}
