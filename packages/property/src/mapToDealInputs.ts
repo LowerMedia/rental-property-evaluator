@@ -128,31 +128,36 @@ export function applyLookupPatches(
       skipped.push(patch.target);
       continue;
     }
+    // Track the write so a kind-mismatched patch (possible from untyped
+    // callers) is never reported as applied
+    let written = false;
     switch (patch.target) {
       case 'purchasePrice':
-        if (patch.value.kind === 'number') next.purchasePrice = patch.value.amount;
+        if (patch.value.kind === 'number') { next.purchasePrice = patch.value.amount; written = true; }
         break;
       case 'grossRent':
-        if (patch.value.kind === 'number') next.grossRent = patch.value.amount;
+        if (patch.value.kind === 'number') { next.grossRent = patch.value.amount; written = true; }
         break;
       case 'sqft':
-        if (patch.value.kind === 'number') next.sqft = patch.value.amount;
+        if (patch.value.kind === 'number') { next.sqft = patch.value.amount; written = true; }
         break;
       case 'units':
-        if (patch.value.kind === 'number') next.units = patch.value.amount;
+        if (patch.value.kind === 'number') { next.units = patch.value.amount; written = true; }
         break;
       case 'expenses.taxes':
         if (patch.value.kind === 'expense') {
           next.expenses.taxes = { amount: patch.value.amount, period: 'annual' };
+          written = true;
         }
         break;
       case 'expenses.insurance':
         if (patch.value.kind === 'expense') {
           next.expenses.insurance = { amount: patch.value.amount, period: 'annual' };
+          written = true;
         }
         break;
     }
-    applied.push(patch.target);
+    if (written) applied.push(patch.target);
   }
 
   return { inputs: next, applied, skipped };
