@@ -57,14 +57,15 @@ export async function fetchPropertyData(
   if (avm.status === 'rejected') throw ensureRentCastError(avm.reason);
   if (rent.status === 'rejected') throw ensureRentCastError(rent.reason);
 
-  const avmData  = avm.value  as { price: number };
-  const rentData = rent.value as { rent: number };
-  if (typeof avmData.price !== 'number') {
-    throw new RentCastError('unknown', 'RentCast: unexpected AVM value shape (price missing)');
-  }
-  if (typeof rentData.rent !== 'number') {
-    throw new RentCastError('unknown', 'RentCast: unexpected AVM rent shape (rent missing)');
-  }
+  const extractNumber = (data: unknown, field: string, label: string): number => {
+    if (data == null || typeof data !== 'object' || typeof (data as Record<string, unknown>)[field] !== 'number') {
+      throw new RentCastError('unknown', `RentCast: unexpected ${label} shape (${field} missing)`);
+    }
+    return (data as Record<string, unknown>)[field] as number;
+  };
+
+  const purchasePrice = extractNumber(avm.value, 'price', 'AVM value');
+  const grossRent     = extractNumber(rent.value, 'rent',  'AVM rent');
 
   let sqft: number | null        = null;
   let units: number | null       = null;
@@ -99,5 +100,5 @@ export async function fetchPropertyData(
     }
   }
 
-  return { purchasePrice: avmData.price, grossRent: rentData.rent, sqft, units, annualTaxes };
+  return { purchasePrice, grossRent, sqft, units, annualTaxes };
 }
