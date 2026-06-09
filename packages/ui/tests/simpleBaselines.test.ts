@@ -15,6 +15,7 @@ import {
   getSimpleBaselines,
   applySimpleBaselines,
   BASELINE_DESCRIPTIONS,
+  type LocationRateOverrides,
 } from '../src/state/simpleBaselines';
 import { DEFAULT_INPUTS } from '../src/state/defaultInputs';
 import type { DealInputs } from '@rpe/engine';
@@ -88,6 +89,49 @@ describe('getSimpleBaselines', () => {
   });
 });
 
+// ─── getSimpleBaselines — with LocationRateOverrides ────────────────────────
+
+describe('getSimpleBaselines — with LocationRateOverrides', () => {
+  const TX_OVERRIDES: LocationRateOverrides = {
+    propertyTaxRate: 0.018,
+    insuranceRate: 0.0123,
+    vacancyRate: 0.08,
+    sourceLabel: 'TX state averages',
+  };
+
+  it('uses override propertyTaxRate for taxes amount', () => {
+    const b = getSimpleBaselines(300_000, TX_OVERRIDES);
+    expect(b.expenses.taxes.amount).toBe(Math.round(300_000 * 0.018)); // 5400
+    expect(b.expenses.taxes.period).toBe('annual');
+  });
+
+  it('uses override insuranceRate for insurance amount', () => {
+    const b = getSimpleBaselines(300_000, TX_OVERRIDES);
+    expect(b.expenses.insurance.amount).toBe(Math.round(300_000 * 0.0123)); // 3690
+    expect(b.expenses.insurance.period).toBe('annual');
+  });
+
+  it('converts override vacancyRate (0–1) to vacancyPct (%)', () => {
+    const b = getSimpleBaselines(300_000, TX_OVERRIDES);
+    expect(b.vacancyPct).toBe(8.0);
+  });
+
+  it('overrides do not affect static fields', () => {
+    const b = getSimpleBaselines(300_000, TX_OVERRIDES);
+    expect(b.interestRate).toBe(7.0);
+    expect(b.loanTermYears).toBe(30);
+    expect(b.expenses.capExPct).toBe(5);
+    expect(b.expenses.mgmtPct).toBe(10);
+  });
+
+  it('falls back to national rates when overrides is undefined', () => {
+    const b = getSimpleBaselines(300_000, undefined);
+    expect(b.expenses.taxes.amount).toBe(Math.round(300_000 * 0.012)); // 3600 (national 1.2 %)
+    expect(b.expenses.insurance.amount).toBe(Math.round(300_000 * 0.005)); // 1500 (national 0.5 %)
+    expect(b.vacancyPct).toBe(5);
+  });
+});
+
 // ─── applySimpleBaselines ─────────────────────────────────────────────────────
 
 describe('applySimpleBaselines', () => {
@@ -157,6 +201,41 @@ describe('applySimpleBaselines', () => {
     expect(r.expenses).toBeDefined();
     expect(r.expenses.taxes).toBeDefined();
     expect(r.expenses.insurance).toBeDefined();
+  });
+});
+
+// ─── applySimpleBaselines — with LocationRateOverrides ───────────────────────
+
+describe('applySimpleBaselines — with LocationRateOverrides', () => {
+  const TX_OVERRIDES: LocationRateOverrides = {
+    propertyTaxRate: 0.018,
+    insuranceRate: 0.0123,
+    vacancyRate: 0.08,
+    sourceLabel: 'TX state averages',
+  };
+
+  const inputs = { ...DEFAULT_INPUTS, purchasePrice: 300_000, vacancyPct: 6 };
+
+  it('override tax rate flows through to result expenses', () => {
+    const r = applySimpleBaselines(inputs, TX_OVERRIDES);
+    expect(r.expenses.taxes.amount).toBe(Math.round(300_000 * 0.018)); // 5400
+  });
+
+  it('override insurance rate flows through to result expenses', () => {
+    const r = applySimpleBaselines(inputs, TX_OVERRIDES);
+    expect(r.expenses.insurance.amount).toBe(Math.round(300_000 * 0.0123)); // 3690
+  });
+
+  it("user's visible vacancyPct takes precedence over override vacancyRate", () => {
+    // vacancyPct is a simple-tier field — the user owns it; override.vacancyRate is baseline only
+    const r = applySimpleBaselines(inputs, TX_OVERRIDES);
+    expect(r.vacancyPct).toBe(6); // from inputs, not 8 from TX_OVERRIDES.vacancyRate
+  });
+
+  it('without overrides uses national-average tax and insurance', () => {
+    const r = applySimpleBaselines(inputs);
+    expect(r.expenses.taxes.amount).toBe(Math.round(300_000 * 0.012)); // 3600
+    expect(r.expenses.insurance.amount).toBe(Math.round(300_000 * 0.005)); // 1500
   });
 });
 
