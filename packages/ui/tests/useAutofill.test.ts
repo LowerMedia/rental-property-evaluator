@@ -59,7 +59,7 @@ describe('useAutofill', () => {
     mockFetchOk(MOCK_DATA);
     const { result } = renderHook(() => useAutofill({ dispatch, apiKey: 'key', apiUrl: 'http://localhost:3001' }));
 
-    await act(async () => { result.current.trigger('123 Main St'); });
+    await act(async () => { await result.current.trigger('123 Main St'); });
 
     expect(result.current.status).toBe('preview');
     expect(result.current.previewData).toEqual(MOCK_DATA);
@@ -69,7 +69,7 @@ describe('useAutofill', () => {
     mockFetchError(401, 'Invalid API key');
     const { result } = renderHook(() => useAutofill({ dispatch, apiKey: 'key', apiUrl: 'http://localhost:3001' }));
 
-    await act(async () => { result.current.trigger('123 Main St'); });
+    await act(async () => { await result.current.trigger('123 Main St'); });
 
     expect(result.current.status).toBe('error');
     expect(result.current.errorMessage).toMatch(/api key/i);
@@ -79,7 +79,7 @@ describe('useAutofill', () => {
     mockFetchError(404, 'Property not found');
     const { result } = renderHook(() => useAutofill({ dispatch, apiKey: 'key', apiUrl: 'http://localhost:3001' }));
 
-    await act(async () => { result.current.trigger('unknown address'); });
+    await act(async () => { await result.current.trigger('unknown address'); });
 
     expect(result.current.status).toBe('error');
     expect(result.current.errorMessage).toMatch(/not found/i);
@@ -89,7 +89,7 @@ describe('useAutofill', () => {
     mockFetchError(402, 'Rate limit exceeded');
     const { result } = renderHook(() => useAutofill({ dispatch, apiKey: 'key', apiUrl: 'http://localhost:3001' }));
 
-    await act(async () => { result.current.trigger('123 Main St'); });
+    await act(async () => { await result.current.trigger('123 Main St'); });
 
     expect(result.current.status).toBe('error');
     expect(result.current.errorMessage).toMatch(/rate limit/i);
@@ -99,7 +99,7 @@ describe('useAutofill', () => {
     it('dispatches SET_NUMBER for purchasePrice', async () => {
       mockFetchOk(MOCK_DATA);
       const { result } = renderHook(() => useAutofill({ dispatch, apiKey: 'key', apiUrl: 'http://localhost:3001' }));
-      await act(async () => { result.current.trigger('123 Main St'); });
+      await act(async () => { await result.current.trigger('123 Main St'); });
       act(() => { result.current.apply(); });
       expect(dispatch).toHaveBeenCalledWith({ type: 'SET_NUMBER', field: 'purchasePrice', value: 342_000 });
     });
@@ -107,7 +107,7 @@ describe('useAutofill', () => {
     it('dispatches SET_NUMBER for grossRent', async () => {
       mockFetchOk(MOCK_DATA);
       const { result } = renderHook(() => useAutofill({ dispatch, apiKey: 'key', apiUrl: 'http://localhost:3001' }));
-      await act(async () => { result.current.trigger('123 Main St'); });
+      await act(async () => { await result.current.trigger('123 Main St'); });
       act(() => { result.current.apply(); });
       expect(dispatch).toHaveBeenCalledWith({ type: 'SET_NUMBER', field: 'grossRent', value: 2_150 });
     });
@@ -115,7 +115,7 @@ describe('useAutofill', () => {
     it('dispatches SET_EXPENSE_FIXED for taxes when annualTaxes is non-null', async () => {
       mockFetchOk(MOCK_DATA);
       const { result } = renderHook(() => useAutofill({ dispatch, apiKey: 'key', apiUrl: 'http://localhost:3001' }));
-      await act(async () => { result.current.trigger('123 Main St'); });
+      await act(async () => { await result.current.trigger('123 Main St'); });
       act(() => { result.current.apply(); });
       expect(dispatch).toHaveBeenCalledWith({
         type: 'SET_EXPENSE_FIXED',
@@ -125,10 +125,18 @@ describe('useAutofill', () => {
       });
     });
 
+    it('dispatches SET_NUMBER for units when units is non-null', async () => {
+      mockFetchOk(MOCK_DATA);
+      const { result } = renderHook(() => useAutofill({ dispatch, apiKey: 'key', apiUrl: 'http://localhost:3001' }));
+      await act(async () => { await result.current.trigger('123 Main St'); });
+      act(() => { result.current.apply(); });
+      expect(dispatch).toHaveBeenCalledWith({ type: 'SET_NUMBER', field: 'units', value: 1 });
+    });
+
     it('dispatches SET_NUMBER for sqft when non-null', async () => {
       mockFetchOk(MOCK_DATA);
       const { result } = renderHook(() => useAutofill({ dispatch, apiKey: 'key', apiUrl: 'http://localhost:3001' }));
-      await act(async () => { result.current.trigger('123 Main St'); });
+      await act(async () => { await result.current.trigger('123 Main St'); });
       act(() => { result.current.apply(); });
       expect(dispatch).toHaveBeenCalledWith({ type: 'SET_NUMBER', field: 'sqft', value: 1_480 });
     });
@@ -136,7 +144,7 @@ describe('useAutofill', () => {
     it('skips sqft dispatch when sqft is null', async () => {
       mockFetchOk({ ...MOCK_DATA, sqft: null });
       const { result } = renderHook(() => useAutofill({ dispatch, apiKey: 'key', apiUrl: 'http://localhost:3001' }));
-      await act(async () => { result.current.trigger('123 Main St'); });
+      await act(async () => { await result.current.trigger('123 Main St'); });
       act(() => { result.current.apply(); });
       expect(dispatch).not.toHaveBeenCalledWith(
         expect.objectContaining({ field: 'sqft' }),
@@ -146,7 +154,7 @@ describe('useAutofill', () => {
     it('skips taxes dispatch when annualTaxes is null', async () => {
       mockFetchOk({ ...MOCK_DATA, annualTaxes: null });
       const { result } = renderHook(() => useAutofill({ dispatch, apiKey: 'key', apiUrl: 'http://localhost:3001' }));
-      await act(async () => { result.current.trigger('123 Main St'); });
+      await act(async () => { await result.current.trigger('123 Main St'); });
       act(() => { result.current.apply(); });
       expect(dispatch).not.toHaveBeenCalledWith(
         expect.objectContaining({ field: 'taxes' }),
@@ -156,7 +164,7 @@ describe('useAutofill', () => {
     it('returns to idle after apply()', async () => {
       mockFetchOk(MOCK_DATA);
       const { result } = renderHook(() => useAutofill({ dispatch, apiKey: 'key', apiUrl: 'http://localhost:3001' }));
-      await act(async () => { result.current.trigger('123 Main St'); });
+      await act(async () => { await result.current.trigger('123 Main St'); });
       act(() => { result.current.apply(); });
       expect(result.current.status).toBe('idle');
     });
@@ -166,7 +174,7 @@ describe('useAutofill', () => {
     it('returns to idle from preview state', async () => {
       mockFetchOk(MOCK_DATA);
       const { result } = renderHook(() => useAutofill({ dispatch, apiKey: 'key', apiUrl: 'http://localhost:3001' }));
-      await act(async () => { result.current.trigger('123 Main St'); });
+      await act(async () => { await result.current.trigger('123 Main St'); });
       act(() => { result.current.dismiss(); });
       expect(result.current.status).toBe('idle');
       expect(result.current.previewData).toBeNull();
@@ -175,7 +183,7 @@ describe('useAutofill', () => {
     it('returns to idle from error state', async () => {
       mockFetchError(404, 'not found');
       const { result } = renderHook(() => useAutofill({ dispatch, apiKey: 'key', apiUrl: 'http://localhost:3001' }));
-      await act(async () => { result.current.trigger('x'); });
+      await act(async () => { await result.current.trigger('x'); });
       act(() => { result.current.dismiss(); });
       expect(result.current.status).toBe('idle');
     });

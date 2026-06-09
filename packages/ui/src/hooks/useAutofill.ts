@@ -15,7 +15,7 @@ type AutofillStatus = 'idle' | 'loading' | 'preview' | 'error';
 interface UseAutofillOptions {
   dispatch: Dispatch<DealAction>;
   apiKey: string | null;
-  /** Base URL of apps/api, e.g. 'http://localhost:3001'. Defaults to VITE_API_URL or http://localhost:3001 */
+  /** Base URL of apps/api, e.g. 'http://localhost:3001'. Defaults to 'http://localhost:3001'. */
   apiUrl?: string;
 }
 
@@ -23,7 +23,7 @@ export interface UseAutofillReturn {
   status: AutofillStatus;
   previewData: PropertyData | null;
   errorMessage: string | null;
-  trigger: (address: string) => void;
+  trigger: (address: string) => Promise<void>;
   apply: () => void;
   dismiss: () => void;
 }
@@ -52,6 +52,7 @@ export function useAutofill({
 
       setStatus('loading');
       setErrorMessage(null);
+      setPreviewData(null);
 
       try {
         const res = await fetch(`${resolvedApiUrl}/property`, {
