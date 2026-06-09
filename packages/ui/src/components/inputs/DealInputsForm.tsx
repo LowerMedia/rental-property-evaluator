@@ -38,6 +38,8 @@ export interface DealInputsFormProps {
   location?: LocationState;
   /** True while useLocationDefaults is resolving the ZIP → region. */
   locationResolving?: boolean;
+  /** Source attribution label shown below the resolved chip (e.g. 'TX state averages'). */
+  locationSourceLabel?: string;
   /** Called with a valid ZIP5 when the user submits the location input. */
   onZipChange?: (zip: string) => void;
   /** Called when the user clears the location chip. */
@@ -62,6 +64,7 @@ export function DealInputsForm({
   apiUrl,
   location,
   locationResolving = false,
+  locationSourceLabel,
   onZipChange,
   onLocationClear,
 }: DealInputsFormProps) {
@@ -98,6 +101,7 @@ export function DealInputsForm({
           stateCode={location?.stateCode ?? ''}
           label={location?.label ?? ''}
           resolving={locationResolving}
+          sourceLabel={locationSourceLabel}
           onZipChange={onZipChange}
           onClear={onLocationClear}
         />
