@@ -26,9 +26,12 @@ const CANDIDATE = {
   zip: '78701',
 };
 
-function startServer(): Promise<{ server: Server; base: string }> {
+function startServer(config?: Parameters<typeof createApp>[0]): Promise<{ server: Server; base: string }> {
   return new Promise((resolve, reject) => {
-    const server = createApp({ property: { cacheTtlMs: 60_000, rpm: 1000, dailyCap: 10000 } });
+    const server = createApp(config ?? {
+      property: { cacheTtlMs: 60_000, rpm: 1000, dailyCap: 10000 },
+      geocode: { rpm: 1000, dailyCap: 10000 },
+    });
     server.once('error', reject);
     server.listen(0, '127.0.0.1', () => {
       server.off('error', reject);
@@ -118,6 +121,31 @@ describe('GET /geocode', () => {
     expect(res.status).toBe(405);
     const body = await res.json() as Record<string, unknown>;
     expect(body['code']).toBe('method_not_allowed');
+  });
+
+  it('rate limits provider-bound geocodes per IP; cache hits stay free', async () => {
+    // Fresh server with a tight limit
+    await new Promise<void>((resolve, reject) => {
+      server?.close((err) => (err ? reject(err) : resolve()));
+    });
+    const s = await startServer({
+      property: { cacheTtlMs: 60_000, rpm: 1000, dailyCap: 10000 },
+      geocode: { rpm: 1, dailyCap: 10000 },
+    });
+    server = s.server;
+    mockGeocode.mockResolvedValue([CANDIDATE]);
+
+    // 1st: provider call (spends the rpm=1 quota); 2nd same query: cache hit, free
+    expect((await fetch(`${s.base}/geocode?q=${encodeURIComponent('123 Main St')}`)).status).toBe(200);
+    expect((await fetch(`${s.base}/geocode?q=${encodeURIComponent('123 Main St')}`)).status).toBe(200);
+
+    // New query would hit the provider → limited
+    const limited = await fetch(`${s.base}/geocode?q=${encodeURIComponent('9 Elm Ct')}`);
+    expect(limited.status).toBe(429);
+    const body = await limited.json() as Record<string, unknown>;
+    expect(body['code']).toBe('proxy_rate_limit');
+    expect(typeof body['retryAfterSec']).toBe('number');
+    expect(mockGeocode).toHaveBeenCalledTimes(1);
   });
 
   it('returns 502 with code upstream_error and does not cache the failure', async () => {

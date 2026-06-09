@@ -18,7 +18,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { geocodeAddress, type GeocodeCandidate } from '../services/censusGeocoder.js';
-import { normalizeAddressKey, type TtlCache } from '../services/guardrails.js';
+import { clientIp, normalizeAddressKey, type RateLimiter, type TtlCache } from '../services/guardrails.js';
 
 type JsonFn = (res: ServerResponse, status: number, body: unknown) => void;
 
@@ -32,6 +32,9 @@ export interface GeocodeSuccessBody {
 
 export interface GeocodeDeps {
   cache: TtlCache<GeocodeSuccessBody>;
+  /** Census is free, but abuse through this proxy risks upstream IP bans
+   * on the shared egress — provider-bound calls are rate limited per IP. */
+  limiter: RateLimiter;
 }
 
 export async function handleGeocode(
@@ -63,6 +66,16 @@ export async function handleGeocode(
   const hit = deps.cache.get(cacheKey);
   if (hit !== undefined) {
     json(res, 200, { ...hit, cached: true });
+    return;
+  }
+
+  const decision = deps.limiter.check(clientIp(req));
+  if (!decision.allowed) {
+    json(res, 429, {
+      error: 'Too many geocode requests from this client — try again later.',
+      code: 'proxy_rate_limit',
+      retryAfterSec: decision.retryAfterSec,
+    });
     return;
   }
 
