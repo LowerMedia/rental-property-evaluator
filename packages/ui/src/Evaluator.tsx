@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useEffect } from 'react';
 import { evaluate, SCREENER_METRIC_CONFIG, calcLoanAmount, normalizeInputs } from '@rpe/engine';
 import type { DealInputs, ScreenerResults, ProFormaResults } from '@rpe/engine';
 import { useSavedDeals } from './hooks/useSavedDeals';
@@ -16,6 +16,7 @@ import { fmtCurrency, fmtPercent, fmtNumber, fmtMultiplier, NULL_DISPLAY } from 
 import type { SavedDeal } from './state/savedDealsSchema';
 import { SIMPLE_RESULT_KEYS, type UiMode } from './state/uiMode';
 import { applySimpleBaselines } from './state/simpleBaselines';
+import { useLocationDefaults } from './hooks/useLocationDefaults';
 import { ConnectorSettingsModal } from './components/ConnectorSettingsModal';
 import { getRentCastKey } from './state/connectorStorage';
 import {
@@ -485,6 +486,41 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
     clearLocationStorage();
   }, []);
 
+  /**
+   * useLocationDefaults — fetches regional rates for the current ZIP (RPE-66).
+   * When zip is '' (no location), returns no rates and resolving=false.
+   */
+  const {
+    rates: locationRates,
+    resolving: locationResolving,
+    failed: locationLookupFailed,
+    stateCode: resolvedStateCode,
+    label: resolvedLabel,
+  } = useLocationDefaults(location.zip, apiUrl);
+
+  /**
+   * Sync resolved stateCode/label back into persisted location state.
+   * Runs when the hook resolves a new ZIP so the chip shows the resolved label
+   * and localStorage stays up to date.
+   */
+  useEffect(() => {
+    if (
+      location.zip &&
+      resolvedStateCode &&
+      // Sync when either field drifts — a stored location can have the right
+      // stateCode but a stale/empty label (e.g. API label format changed)
+      (resolvedStateCode !== location.stateCode || resolvedLabel !== location.label)
+    ) {
+      const resolved: LocationState = {
+        zip: location.zip,
+        stateCode: resolvedStateCode,
+        label: resolvedLabel,
+      };
+      setLocation(resolved);
+      saveLocation(resolved);
+    }
+  }, [location.zip, location.stateCode, location.label, resolvedStateCode, resolvedLabel]);
+
   /** Seed pro-forma defaults into state the first time the user enters pro-forma mode. */
   const handleSetProFormaMode = useCallback((pf: boolean) => {
     setProFormaMode(pf);
@@ -509,20 +545,24 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
    * through applySimpleBaselines() first so the engine receives a fully-
    * populated DealInputs with baseline values for all hidden complex fields.
    */
+  // Location rate overrides (null when no location is set or rates not yet loaded).
+  // applySimpleBaselines accepts undefined — null → undefined coercion here is intentional.
+  const rateOverrides = locationRates ?? undefined;
+
   const resultsList = useMemo(
     () =>
       scenarios.map((s) =>
         evaluate(
-          uiMode === 'simple' ? applySimpleBaselines(s.inputs) : s.inputs,
+          uiMode === 'simple' ? applySimpleBaselines(s.inputs, rateOverrides) : s.inputs,
         ) as ScreenerResults,
       ),
-    [scenarios, uiMode],
+    [scenarios, uiMode, rateOverrides],
   );
 
   const activeResults =
     resultsList[activeIdx] ??
     (evaluate(
-      uiMode === 'simple' ? applySimpleBaselines(activeInputs) : activeInputs,
+      uiMode === 'simple' ? applySimpleBaselines(activeInputs, rateOverrides) : activeInputs,
     ) as ScreenerResults);
   const isComparing = scenarios.length > 1;
 
@@ -534,9 +574,9 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
   const activeNormalized = useMemo(
     () =>
       normalizeInputs(
-        uiMode === 'simple' ? applySimpleBaselines(activeInputs) : activeInputs,
+        uiMode === 'simple' ? applySimpleBaselines(activeInputs, rateOverrides) : activeInputs,
       ),
-    [activeInputs, uiMode],
+    [activeInputs, uiMode, rateOverrides],
   );
   const proFormaResults = useMemo<ProFormaResults | null>(() => {
     if (!proFormaMode) return null;
@@ -667,7 +707,9 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
               apiKey={apiKey}
               apiUrl={apiUrl}
               location={location}
-              locationResolving={false}
+              locationResolving={locationResolving}
+              locationLookupFailed={locationLookupFailed}
+              locationSourceLabel={locationRates?.sourceLabel}
               onZipChange={handleZipChange}
               onLocationClear={handleLocationClear}
             />

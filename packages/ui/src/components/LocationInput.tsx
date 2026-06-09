@@ -10,6 +10,10 @@ export interface LocationInputProps {
   label: string;
   /** True while useLocationDefaults is fetching the region. */
   resolving?: boolean;
+  /** True when the last region lookup failed — shows an error hint instead of "pending". */
+  lookupFailed?: boolean;
+  /** Data-source attribution shown below the resolved chip (e.g. 'TX state averages (Census ACS / NAIC 2022)'). */
+  sourceLabel?: string;
   /** Called with a valid ZIP5 when the user submits. */
   onZipChange: (zip: string) => void;
   /** Called when the user clears the location. */
@@ -32,6 +36,8 @@ export function LocationInput({
   stateCode,
   label,
   resolving = false,
+  lookupFailed = false,
+  sourceLabel,
   onZipChange,
   onClear,
 }: LocationInputProps) {
@@ -64,28 +70,35 @@ export function LocationInput({
   // ── Resolved chip ────────────────────────────────────────────────────────────
   if (isResolved) {
     return (
-      <div className="px-5 py-2.5 border-b border-border flex items-center gap-2">
-        <span className="text-xs text-lo uppercase tracking-widest select-none">📍 Location</span>
-        <span
-          className="
-            inline-flex items-center gap-1.5 rounded-full
-            bg-raised border border-border
-            px-2.5 py-0.5 text-xs text-mid
-          "
-        >
-          {label || `${stateCode} · ${zip}`}
-          <button
-            type="button"
-            onClick={handleClear}
-            aria-label={`Clear location ${label || zip}`}
+      <div className="px-5 py-2.5 border-b border-border space-y-1">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-lo uppercase tracking-widest select-none">📍 Location</span>
+          <span
             className="
-              text-lo hover:text-fail transition-colors
-              leading-none rounded-full focus:outline-none focus:ring-1 focus:ring-accent
+              inline-flex items-center gap-1.5 rounded-full
+              bg-raised border border-border
+              px-2.5 py-0.5 text-xs text-mid
             "
           >
-            ×
-          </button>
-        </span>
+            {label || `${stateCode} · ${zip}`}
+            <button
+              type="button"
+              onClick={handleClear}
+              aria-label={`Clear location ${label || zip}`}
+              className="
+                text-lo hover:text-fail transition-colors
+                leading-none rounded-full focus:outline-none focus:ring-1 focus:ring-accent
+              "
+            >
+              ×
+            </button>
+          </span>
+        </div>
+        {sourceLabel && (
+          <p className="text-xs text-lo pl-0.5" title="Source for regional assumption defaults">
+            📊 {sourceLabel}
+          </p>
+        )}
       </div>
     );
   }
@@ -129,8 +142,12 @@ export function LocationInput({
       </div>
       {zip !== '' && stateCode === '' && (
         <div className="flex items-center gap-2">
-          <p className="text-xs text-yellow-400/80">
-            {resolving ? `Resolving ${zip}…` : `${zip} pending`}
+          <p className={`text-xs ${lookupFailed ? 'text-red-400' : 'text-yellow-400/80'}`} role={lookupFailed ? 'alert' : undefined}>
+            {resolving
+              ? `Resolving ${zip}…`
+              : lookupFailed
+                ? `Couldn't look up ${zip} — using national defaults. Clear and retry.`
+                : `${zip} pending`}
           </p>
           <button
             type="button"

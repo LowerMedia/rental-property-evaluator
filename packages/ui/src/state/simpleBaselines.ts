@@ -1,5 +1,6 @@
 /**
  * E8 — Baseline-assumptions module (RPE-58)
+ * E9 — Location-based overrides added in RPE-66
  *
  * Provides conservative national-average default values for the complex-tier
  * DealInputs fields hidden in simple mode (financing, variable/fixed expenses).
@@ -10,8 +11,9 @@
  *   - All baseline values are documented in BASELINE_DESCRIPTIONS.
  *   - Purchase-price-dependent baselines (closing costs, taxes, insurance) are
  *     recomputed each time the purchase price changes.
- *   - E9 (location defaults, RPE-56) will override these static values per region
- *     by replacing getSimpleBaselines() at the call sites in Evaluator.tsx.
+ *   - getSimpleBaselines() accepts an optional LocationRateOverrides argument that
+ *     replaces the static national-average tax and insurance values with
+ *     region-specific data from the useLocationDefaults hook (RPE-66).
  *   - applySimpleBaselines() is the evaluation path for simple mode ONLY.
  *     Calling it in complex mode is incorrect — complex mode passes inputs directly.
  */
@@ -47,6 +49,30 @@ export interface SimpleBaselineValues {
   };
 }
 
+// ─── Location rate overrides (RPE-66) ────────────────────────────────────────
+
+/**
+ * Region-specific rate overrides supplied by the useLocationDefaults hook.
+ * When provided to getSimpleBaselines(), these replace the static national-average
+ * tax and insurance rates with location-specific data.
+ *
+ * Vacancy is deliberately NOT part of this contract: vacancyPct is a visible,
+ * user-controlled simple-tier field, so applySimpleBaselines always takes it
+ * from the user's inputs — a location-based vacancy override would never reach
+ * evaluation.
+ *
+ * The interface is a structural subset of @rpe/region-defaults' RegionalRates,
+ * so RegionalRates satisfies this type without an explicit cast.
+ */
+export interface LocationRateOverrides {
+  /** 0–1 effective property tax rate (e.g. 0.018 for Texas). */
+  propertyTaxRate: number;
+  /** 0–1 annual insurance premium as % of purchase price. */
+  insuranceRate: number;
+  /** Human-readable source description (e.g. 'TX state averages (Census ACS / NAIC 2022)'). */
+  sourceLabel: string;
+}
+
 // ─── Core baseline function ──────────────────────────────────────────────────
 
 /**
@@ -54,9 +80,19 @@ export interface SimpleBaselineValues {
  *
  * Purchase-price-relative items (closing costs, taxes, insurance) are
  * re-derived on every call; all other values are static constants.
+ *
+ * @param purchasePrice  The property's purchase price.
+ * @param overrides      Optional location-based rate overrides (RPE-66).
+ *                       When provided, replace national-average tax and
+ *                       insurance with region-specific values.
  */
-export function getSimpleBaselines(purchasePrice: number): SimpleBaselineValues {
+export function getSimpleBaselines(
+  purchasePrice: number,
+  overrides?: LocationRateOverrides,
+): SimpleBaselineValues {
   const pp = purchasePrice > 0 ? purchasePrice : 0;
+  const taxRate = overrides?.propertyTaxRate ?? 0.012;
+  const insuranceRate = overrides?.insuranceRate ?? 0.005;
   return {
     // ── Financing ──────────────────────────────────────────────────────────
     interestRate: 7.0,
@@ -68,7 +104,7 @@ export function getSimpleBaselines(purchasePrice: number): SimpleBaselineValues 
 
     // ── Income ────────────────────────────────────────────────────────────
     otherIncome: 0,
-    /** 5 % vacancy — conservative national average for stabilised SFR / small multifamily. */
+    /** 5 % vacancy — conservative national average; the visible field the user controls. */
     vacancyPct: 5,
 
     // ── Expense settings ──────────────────────────────────────────────────
@@ -86,10 +122,8 @@ export function getSimpleBaselines(purchasePrice: number): SimpleBaselineValues 
       miscPct: 1,
 
       // ── Fixed expenses (purchase-price-relative heuristics) ─────────────
-      /** Property taxes: ~1.2 % of purchase price annually (national effective rate). */
-      taxes: { amount: Math.round(pp * 0.012), period: 'annual' },
-      /** Insurance: ~0.5 % of purchase price annually (homeowners / landlord policy). */
-      insurance: { amount: Math.round(pp * 0.005), period: 'annual' },
+      taxes: { amount: Math.round(pp * taxRate), period: 'annual' },
+      insurance: { amount: Math.round(pp * insuranceRate), period: 'annual' },
       /** HOA: $0 — assumed single-family or self-managed; user adjusts if needed. */
       hoa: { amount: 0, period: 'monthly' },
       /** Other fixed expense: $0 — no supplemental fixed costs assumed. */
@@ -153,8 +187,11 @@ export const BASELINE_DESCRIPTIONS = {
  * @param inputs  Current scenario inputs (from the reducer).
  * @returns       A new DealInputs object safe to pass directly to evaluate().
  */
-export function applySimpleBaselines(inputs: DealInputs): DealInputs {
-  const b = getSimpleBaselines(inputs.purchasePrice);
+export function applySimpleBaselines(
+  inputs: DealInputs,
+  overrides?: LocationRateOverrides,
+): DealInputs {
+  const b = getSimpleBaselines(inputs.purchasePrice, overrides);
   return {
     // ── Baseline fields (complex-tier) ────────────────────────────────────
     ...b,
