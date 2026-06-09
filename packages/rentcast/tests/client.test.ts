@@ -1,7 +1,7 @@
 /**
  * RPE-43a: fetchPropertyData unit tests
  *
- * All RentCast HTTP calls are mocked via vi.mock on globalThis.fetch.
+ * All RentCast HTTP calls are intercepted via vi.spyOn(globalThis, 'fetch').
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -63,7 +63,7 @@ describe('fetchPropertyData', () => {
       expect(result.annualTaxes).toBe(4_210);
     });
 
-    it('makes all three RentCast calls in parallel', async () => {
+    it('calls fetch exactly three times (once per endpoint)', async () => {
       const fetchSpy = vi.spyOn(globalThis, 'fetch')
         .mockResolvedValue(mockOk(AVM_VALUE_RESPONSE));
 

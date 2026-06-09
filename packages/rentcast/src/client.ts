@@ -14,7 +14,7 @@ async function rcGet(path: string, apiKey: string): Promise<unknown> {
     headers: { 'X-Api-Key': apiKey, Accept: 'application/json' },
   });
   if (!res.ok) {
-    throw new RentCastError(statusToCode(res.status), `RentCast ${res.status}: ${path}`);
+    throw new RentCastError(statusToCode(res.status), `RentCast ${res.status}: ${path.split('?')[0]}`);
   }
   return res.json() as Promise<unknown>;
 }
