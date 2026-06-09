@@ -54,13 +54,21 @@ export function DealInputsForm({
   // Fixed-expense refs (only used in complex mode, declared here to avoid
   // repeated optional-chaining and keep JSX clean).
   const taxes = expenses.taxes as ExpenseInput;
+
+  const currentAutofillValues = {
+    purchasePrice: state.purchasePrice,
+    grossRent: state.grossRent,
+    sqft: state.sqft ?? null,
+    units: state.units ?? null,
+    annualTaxes: taxes.amount ?? null,
+  };
   const insurance = expenses.insurance as ExpenseInput;
   const hoa = expenses.hoa ?? { amount: 0, period: 'monthly' as const };
 
   return (
     <div>
       {/* ── Autofill bar (always shown, adapts when apiKey is null) ──────── */}
-      <AutofillBar dispatch={dispatch} apiKey={apiKey} apiUrl={apiUrl} />
+      <AutofillBar dispatch={dispatch} apiKey={apiKey} apiUrl={apiUrl} currentValues={currentAutofillValues} />
 
       {/* ── Acquisition ──────────────────────────────────────────────────── */}
       <InputSection title="Acquisition">

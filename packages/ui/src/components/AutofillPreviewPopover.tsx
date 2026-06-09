@@ -2,14 +2,24 @@ import { useEffect } from 'react';
 import { fmtCurrency } from '../utils/format';
 import type { PropertyData } from '../hooks/useAutofill';
 
+export interface CurrentFormValues {
+  purchasePrice?: number | null;
+  grossRent?: number | null;
+  sqft?: number | null;
+  units?: number | null;
+  annualTaxes?: number | null;
+}
+
 interface AutofillPreviewPopoverProps {
   data: PropertyData;
   onApply: () => void;
   onDismiss: () => void;
+  currentValues?: CurrentFormValues;
 }
 
 interface DiffRow {
   label: string;
+  currentValue: string;
   value: string;
 }
 
@@ -17,7 +27,7 @@ interface DiffRow {
  * Shows a diff of fields that will change when autofill is applied.
  * Null fields are omitted. Dismiss on Escape or Cancel; apply on Apply.
  */
-export function AutofillPreviewPopover({ data, onApply, onDismiss }: AutofillPreviewPopoverProps) {
+export function AutofillPreviewPopover({ data, onApply, onDismiss, currentValues }: AutofillPreviewPopoverProps) {
   // Dismiss on Escape
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -27,17 +37,21 @@ export function AutofillPreviewPopover({ data, onApply, onDismiss }: AutofillPre
     return () => window.removeEventListener('keydown', handler);
   }, [onDismiss]);
 
+  const cur = currentValues ?? {};
+  const fmtCurrent = (v: number | null | undefined, fmt: (n: number) => string) =>
+    (v != null && v !== 0) ? fmt(v) : '—';
+
   const rows: DiffRow[] = [
-    { label: 'Purchase Price',    value: fmtCurrency(data.purchasePrice) },
-    { label: 'Gross Rent (mo)',   value: fmtCurrency(data.grossRent) },
+    { label: 'Purchase Price',    currentValue: fmtCurrent(cur.purchasePrice, fmtCurrency),     value: fmtCurrency(data.purchasePrice) },
+    { label: 'Gross Rent (mo)',   currentValue: fmtCurrent(cur.grossRent, fmtCurrency),         value: fmtCurrency(data.grossRent) },
     ...(data.annualTaxes !== null
-      ? [{ label: 'Property Taxes (yr)', value: fmtCurrency(data.annualTaxes) }]
+      ? [{ label: 'Property Taxes (yr)', currentValue: fmtCurrent(cur.annualTaxes, fmtCurrency), value: fmtCurrency(data.annualTaxes) }]
       : []),
     ...(data.sqft !== null
-      ? [{ label: 'Square Footage', value: `${data.sqft.toLocaleString()} sqft` }]
+      ? [{ label: 'Square Footage', currentValue: fmtCurrent(cur.sqft, n => `${n.toLocaleString()} sqft`), value: `${data.sqft.toLocaleString()} sqft` }]
       : []),
     ...(data.units !== null
-      ? [{ label: 'Units', value: String(data.units) }]
+      ? [{ label: 'Units', currentValue: fmtCurrent(cur.units, String), value: String(data.units) }]
       : []),
   ];
 
@@ -62,7 +76,7 @@ export function AutofillPreviewPopover({ data, onApply, onDismiss }: AutofillPre
             }`}
           >
             <span className="text-mid">{row.label}</span>
-            <span className="text-lo line-through">—</span>
+            <span className="text-lo line-through">{row.currentValue}</span>
             <span className="text-green-400 font-medium">{row.value}</span>
           </div>
         ))}

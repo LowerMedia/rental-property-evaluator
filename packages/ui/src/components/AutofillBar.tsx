@@ -8,6 +8,13 @@ interface AutofillBarProps {
   dispatch: Dispatch<DealAction>;
   apiKey: string | null;
   apiUrl?: string;
+  currentValues?: {
+    purchasePrice?: number | null;
+    grossRent?: number | null;
+    sqft?: number | null;
+    units?: number | null;
+    annualTaxes?: number | null;
+  };
 }
 
 /**
@@ -17,7 +24,7 @@ interface AutofillBarProps {
  * When apiKey is null (user hasn't connected RentCast), shows a prompt
  * directing them to ⚙ Settings instead of the input.
  */
-export function AutofillBar({ dispatch, apiKey, apiUrl }: AutofillBarProps) {
+export function AutofillBar({ dispatch, apiKey, apiUrl, currentValues }: AutofillBarProps) {
   const [address, setAddress] = useState('');
   const { status, previewData, errorMessage, trigger, apply, dismiss } = useAutofill({ dispatch, apiKey, apiUrl });
 
@@ -85,6 +92,7 @@ export function AutofillBar({ dispatch, apiKey, apiUrl }: AutofillBarProps) {
           data={previewData}
           onApply={() => { apply(); setAddress(''); }}
           onDismiss={() => { dismiss(); setAddress(''); }}
+          currentValues={currentValues}
         />
       )}
     </div>
