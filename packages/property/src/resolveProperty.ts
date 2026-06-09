@@ -13,6 +13,7 @@
  */
 
 import {
+  LOOKUP_FIELD_KEYS,
   TIER_ORDER,
   type LookupFieldKey,
   type LookupTier,
@@ -31,15 +32,7 @@ export function hasPriceOrRent(lookup: PropertyLookup): boolean {
 
 /** All keys a provider may legitimately contribute — foreign keys from
  * untyped providers (wild scrape/paste parsers) are dropped on merge. */
-const KNOWN_KEYS: ReadonlySet<string> = new Set<LookupFieldKey>([
-  'purchasePrice',
-  'grossRent',
-  'sqft',
-  'units',
-  'annualTaxes',
-  'annualInsurance',
-  'yearBuilt',
-]);
+const KNOWN_KEYS: ReadonlySet<string> = new Set(LOOKUP_FIELD_KEYS);
 
 /**
  * Sort providers into tier precedence, preserving the caller's relative
