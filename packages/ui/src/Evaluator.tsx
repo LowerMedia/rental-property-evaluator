@@ -506,7 +506,9 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
     if (
       location.zip &&
       resolvedStateCode &&
-      resolvedStateCode !== location.stateCode
+      // Sync when either field drifts — a stored location can have the right
+      // stateCode but a stale/empty label (e.g. API label format changed)
+      (resolvedStateCode !== location.stateCode || resolvedLabel !== location.label)
     ) {
       const resolved: LocationState = {
         zip: location.zip,
@@ -516,7 +518,7 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
       setLocation(resolved);
       saveLocation(resolved);
     }
-  }, [location.zip, location.stateCode, resolvedStateCode, resolvedLabel]);
+  }, [location.zip, location.stateCode, location.label, resolvedStateCode, resolvedLabel]);
 
   /** Seed pro-forma defaults into state the first time the user enters pro-forma mode. */
   const handleSetProFormaMode = useCallback((pf: boolean) => {

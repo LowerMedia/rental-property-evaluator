@@ -7,9 +7,10 @@
  *
  * Lifecycle:
  *   1. zip='' → no fetch; all fields empty/null, resolving=false
- *   2. zip changes → in-flight request cancelled; resolving=true
+ *   2. zip changes → in-flight request cancelled; prior resolved values
+ *      cleared immediately (no stale leak); resolving=true
  *   3. API succeeds → rates/stateCode/label populated; resolving=false
- *   4. API fails → rates=null, resolving=false (caller degrades gracefully)
+ *   4. API fails → full reset to empty (caller degrades gracefully)
  */
 
 import { useState, useEffect, useRef } from 'react';
@@ -19,10 +20,13 @@ import type { LocationRateOverrides } from '../state/simpleBaselines';
 
 /**
  * Full regional defaults returned by the /region API, superset of
- * LocationRateOverrides. Carrying extra fields (appreciationRate,
- * rentGrowthRate, rent, resolvedLevel) future-proofs pro-forma defaults.
+ * LocationRateOverrides. Carrying extra fields (vacancyRate, appreciationRate,
+ * rentGrowthRate, rent, resolvedLevel) future-proofs pro-forma defaults —
+ * vacancyRate is informational only; the visible vacancy input always wins
+ * in simple-mode evaluation (see LocationRateOverrides docs).
  */
 export interface RegionDefaults extends LocationRateOverrides {
+  vacancyRate: number;
   appreciationRate: number;
   rentGrowthRate: number;
   resolvedLevel: string;
@@ -100,7 +104,10 @@ export function useLocationDefaults(zip: string, apiUrl: string): LocationDefaul
     const controller = new AbortController();
     abortRef.current = controller;
 
-    setResult((prev) => ({ ...prev, resolving: true }));
+    // Clear prior resolved values immediately so a zip change never leaks the
+    // previous location's rates/stateCode/label to callers mid-flight (e.g.
+    // Evaluator persisting the old stateCode against the new zip).
+    setResult({ ...EMPTY, resolving: true });
 
     fetch(`${apiUrl}/region?zip=${encodeURIComponent(zip)}`, {
       signal: controller.signal,
@@ -130,8 +137,9 @@ export function useLocationDefaults(zip: string, apiUrl: string): LocationDefaul
       })
       .catch((err: unknown) => {
         if ((err as Error).name === 'AbortError') return;
-        // Network error or non-OK response — clear rates, stop spinner
-        setResult((prev) => ({ ...prev, resolving: false, rates: null }));
+        // Network error or non-OK response — full reset so no stale
+        // stateCode/label lingers in the UI or syncs into persisted state
+        setResult(EMPTY);
       });
 
     return () => {
