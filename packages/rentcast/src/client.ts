@@ -34,7 +34,8 @@ function ensureRentCastError(reason: unknown): RentCastError {
  *   /properties           → sqft, units, annualTaxes (best-effort; null on 404)
  *
  * Throws RentCastError if either AVM call fails.
- * /properties failure is soft — nullable fields return null.
+ * /properties 404 is soft — nullable fields return null.
+ * Any other /properties error (401, 429, 5xx) is treated as fatal.
  *
  * FIELD NAME VERIFICATION: Before shipping, confirm these field names against
  * https://developers.rentcast.io/reference by running a live API call:
@@ -58,12 +59,23 @@ export async function fetchPropertyData(
 
   const avmData  = avm.value  as { price: number };
   const rentData = rent.value as { rent: number };
+  if (typeof avmData.price !== 'number') {
+    throw new RentCastError('unknown', 'RentCast: unexpected AVM value shape (price missing)');
+  }
+  if (typeof rentData.rent !== 'number') {
+    throw new RentCastError('unknown', 'RentCast: unexpected AVM rent shape (rent missing)');
+  }
 
   let sqft: number | null        = null;
   let units: number | null       = null;
   let annualTaxes: number | null = null;
 
-  if (props.status === 'fulfilled') {
+  // /properties 404 is soft (property not in database); other failures are fatal
+  if (props.status === 'rejected') {
+    const err = ensureRentCastError(props.reason);
+    if (err.code !== 'not_found') throw err;
+    // 404 → fall through with nulls
+  } else {
     // /properties returns an array; we requested limit=1
     const list = props.value as Array<{
       squareFootage?: number;

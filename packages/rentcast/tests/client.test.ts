@@ -151,5 +151,27 @@ describe('fetchPropertyData', () => {
         (e: unknown) => e instanceof RentCastError && e.code === 'unknown',
       );
     });
+
+    it('throws RentCastError bad_key when /properties returns 401', async () => {
+      vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(mockOk(AVM_VALUE_RESPONSE))
+        .mockResolvedValueOnce(mockOk(AVM_RENT_RESPONSE))
+        .mockResolvedValueOnce(mockFail(401));
+
+      await expect(fetchPropertyData('123 Main St', 'key')).rejects.toSatisfy(
+        (e: unknown) => e instanceof RentCastError && e.code === 'bad_key',
+      );
+    });
+
+    it('throws RentCastError unknown when /properties returns 500', async () => {
+      vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(mockOk(AVM_VALUE_RESPONSE))
+        .mockResolvedValueOnce(mockOk(AVM_RENT_RESPONSE))
+        .mockResolvedValueOnce(mockFail(500));
+
+      await expect(fetchPropertyData('123 Main St', 'key')).rejects.toSatisfy(
+        (e: unknown) => e instanceof RentCastError && e.code === 'unknown',
+      );
+    });
   });
 });
