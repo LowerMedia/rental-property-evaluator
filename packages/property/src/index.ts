@@ -30,6 +30,7 @@ export {
 
 export { parseListingText } from './pasteText';
 export { createPasteTextProvider } from './providers/pasteTextProvider';
+export { createScrapeProxyProvider, type ScrapeProxyOptions } from './providers/scrapeProxy';
 
 export {
   mapLookupToDealInputs,
