@@ -30,7 +30,8 @@ export const DEFAULT_LOCATION: LocationState = {
   label: '',
 };
 
-const STORAGE_KEY = 'rpe_location';
+/** Exported so tests and other modules can reference the key without duplicating the string. */
+export const STORAGE_KEY = 'rpe_location';
 
 // ─── Persistence ──────────────────────────────────────────────────────────────
 
@@ -47,6 +48,9 @@ export function loadLocation(): LocationState {
     const zip = typeof parsed.zip === 'string' ? parsed.zip.trim() : '';
     const stateCode = typeof parsed.stateCode === 'string' ? parsed.stateCode.trim().toUpperCase() : '';
     const label = typeof parsed.label === 'string' ? parsed.label.trim() : '';
+    // Guard: if a non-empty zip survived the parse but is not a valid ZIP5, discard the entry.
+    // This protects against corrupted/legacy storage that would propagate an invalid ZIP downstream.
+    if (zip && !isValidZip5(zip)) return DEFAULT_LOCATION;
     return { zip, stateCode, label };
   } catch {
     return DEFAULT_LOCATION;
@@ -59,9 +63,13 @@ export function loadLocation(): LocationState {
  */
 export function saveLocation(loc: LocationState): void {
   try {
+    const zip = loc.zip.trim();
+    // Guard: never persist an invalid ZIP — callers should always pass a valid ZIP5 or ''.
+    // This prevents bypassing UI validation from entraining corrupt data in localStorage.
+    if (zip && !isValidZip5(zip)) return;
     // Normalise before persisting so stored payload is always clean
     const normalized: LocationState = {
-      zip: loc.zip.trim(),
+      zip,
       stateCode: loc.stateCode.trim().toUpperCase(),
       label: loc.label.trim(),
     };
