@@ -138,7 +138,10 @@ export function ConnectorSettingsModal({ onClose }: ConnectorSettingsModalProps)
               </div>
             ) : (
               <div className="flex gap-2 items-center">
-                <code className="flex-1 rounded border border-border bg-base px-3 py-1.5 text-xs text-lo font-mono overflow-hidden break-all">
+                <code
+                  className="flex-1 rounded border border-border bg-base px-3 py-1.5 text-xs text-lo font-mono overflow-hidden break-all"
+                  aria-label={storedKey ? `API key ending in ${storedKey.slice(-4)}` : undefined}
+                >
                   {maskedKey}
                 </code>
                 <button

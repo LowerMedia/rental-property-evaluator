@@ -447,8 +447,8 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
     }
   }, [proFormaMode]);
 
-  const [showSettings, setShowSettings]   = useState(false);
-  const [apiKey, setApiKey]               = useState<string | null>(() => getRentCastKey());
+  const [showSettings, setShowSettings] = useState(false);
+  const [apiKey, setApiKey] = useState<string | null>(() => getRentCastKey());
 
   // Refresh apiKey after the modal closes (user may have saved or removed)
   const handleCloseSettings = useCallback(() => {
