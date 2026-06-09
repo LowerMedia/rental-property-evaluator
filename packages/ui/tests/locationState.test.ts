@@ -63,27 +63,27 @@ describe('loadLocation', () => {
 
   it('returns stored location', () => {
     const loc: LocationState = { zip: '78701', stateCode: 'TX', label: 'TX · 78701' };
-    store['rpe_location'] = JSON.stringify(loc);
+    store[STORAGE_KEY] = JSON.stringify(loc);
     expect(loadLocation()).toEqual(loc);
   });
 
   it('returns DEFAULT_LOCATION when stored value is invalid JSON', () => {
-    store['rpe_location'] = '{not json}';
+    store[STORAGE_KEY] = '{not json}';
     expect(loadLocation()).toEqual(DEFAULT_LOCATION);
   });
 
   it('coerces missing fields to empty strings', () => {
-    store['rpe_location'] = JSON.stringify({ zip: '78701' });
+    store[STORAGE_KEY] = JSON.stringify({ zip: '78701' });
     expect(loadLocation()).toEqual({ zip: '78701', stateCode: '', label: '' });
   });
 
   it('coerces non-string fields to empty strings', () => {
-    store['rpe_location'] = JSON.stringify({ zip: 12345, stateCode: null, label: 99 });
+    store[STORAGE_KEY] = JSON.stringify({ zip: 12345, stateCode: null, label: 99 });
     expect(loadLocation()).toEqual({ zip: '', stateCode: '', label: '' });
   });
 
   it('trims whitespace and uppercases stateCode on load', () => {
-    store['rpe_location'] = JSON.stringify({ zip: ' 78701 ', stateCode: 'tx', label: ' TX · 78701 ' });
+    store[STORAGE_KEY] = JSON.stringify({ zip: ' 78701 ', stateCode: 'tx', label: ' TX · 78701 ' });
     expect(loadLocation()).toEqual({ zip: '78701', stateCode: 'TX', label: 'TX · 78701' });
   });
 
@@ -100,12 +100,12 @@ describe('saveLocation', () => {
   it('persists a location to localStorage', () => {
     const loc: LocationState = { zip: '90210', stateCode: 'CA', label: 'CA · 90210' };
     saveLocation(loc);
-    expect(store['rpe_location']).toBe(JSON.stringify(loc));
+    expect(store[STORAGE_KEY]).toBe(JSON.stringify(loc));
   });
 
   it('normalises whitespace and casing before persisting', () => {
     saveLocation({ zip: ' 78701 ', stateCode: 'tx', label: ' TX · 78701 ' });
-    const stored = JSON.parse(store['rpe_location']!) as LocationState;
+    const stored = JSON.parse(store[STORAGE_KEY]!) as LocationState;
     expect(stored).toEqual({ zip: '78701', stateCode: 'TX', label: 'TX · 78701' });
   });
 
@@ -131,9 +131,9 @@ describe('saveLocation', () => {
 
 describe('clearLocationStorage', () => {
   it('removes the stored location', () => {
-    store['rpe_location'] = JSON.stringify({ zip: '78701', stateCode: 'TX', label: '' });
+    store[STORAGE_KEY] = JSON.stringify({ zip: '78701', stateCode: 'TX', label: '' });
     clearLocationStorage();
-    expect(store['rpe_location']).toBeUndefined();
+    expect(store[STORAGE_KEY]).toBeUndefined();
   });
 
   it('does not throw when key is absent', () => {
