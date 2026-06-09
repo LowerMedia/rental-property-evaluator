@@ -70,6 +70,9 @@ export async function fetchPropertyData(
   let sqft: number | null        = null;
   let units: number | null       = null;
   let annualTaxes: number | null = null;
+  let bedrooms: number | null    = null;
+  let bathrooms: number | null   = null;
+  let yearBuilt: number | null   = null;
 
   // /properties 404 is soft (property not in database); other failures are fatal
   if (props.status === 'rejected') {
@@ -84,13 +87,19 @@ export async function fetchPropertyData(
     const list = props.value as Array<{
       squareFootage?: number;
       units?: number;
+      bedrooms?: number;
+      bathrooms?: number;
+      yearBuilt?: number;
       // propertyTaxes is keyed by tax year: { "2023": { total: number } }
       propertyTaxes?: Record<string, { total: number }>;
     }>;
     const p = list[0];
     if (p) {
-      sqft  = typeof p.squareFootage === 'number' ? p.squareFootage : null;
-      units = typeof p.units         === 'number' ? p.units         : null;
+      sqft      = typeof p.squareFootage === 'number' ? p.squareFootage : null;
+      units     = typeof p.units         === 'number' ? p.units         : null;
+      bedrooms  = typeof p.bedrooms      === 'number' ? p.bedrooms      : null;
+      bathrooms = typeof p.bathrooms     === 'number' ? p.bathrooms     : null;
+      yearBuilt = typeof p.yearBuilt     === 'number' ? p.yearBuilt     : null;
       if (p.propertyTaxes) {
         const years      = Object.keys(p.propertyTaxes).sort().reverse();
         const latestYear = years[0];
@@ -100,5 +109,5 @@ export async function fetchPropertyData(
     }
   }
 
-  return { purchasePrice, grossRent, sqft, units, annualTaxes };
+  return { purchasePrice, grossRent, sqft, units, annualTaxes, bedrooms, bathrooms, yearBuilt };
 }

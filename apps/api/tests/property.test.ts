@@ -29,6 +29,9 @@ const MOCK_DATA = {
   sqft: 1_480,
   units: 1,
   annualTaxes: 4_210,
+  bedrooms: 3,
+  bathrooms: 2,
+  yearBuilt: 1987,
 };
 
 describe('POST /property', () => {
@@ -82,6 +85,9 @@ describe('POST /property', () => {
       sqft:          { value: 1_480,   source: 'rentcast', confidence: 'high' },
       units:         { value: 1,       source: 'rentcast', confidence: 'high' },
       annualTaxes:   { value: 4_210,   source: 'rentcast', confidence: 'high' },
+      bedrooms:      { value: 3,       source: 'rentcast', confidence: 'high' },
+      bathrooms:     { value: 2,       source: 'rentcast', confidence: 'high' },
+      yearBuilt:     { value: 1987,    source: 'rentcast', confidence: 'high' },
     });
   });
 
