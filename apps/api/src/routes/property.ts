@@ -8,7 +8,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { fetchPropertyData, RentCastError } from '@rpe/rentcast';
+import { fetchPropertyData, RentCastError, type RentCastErrorCode } from '@rpe/rentcast';
 
 // Imported from the parent module — passed in to avoid circular imports.
 type JsonFn = (res: ServerResponse, status: number, body: unknown) => void;
@@ -48,11 +48,11 @@ export async function handleProperty(
     return;
   }
   const obj = parsed as Record<string, unknown>;
-  if (typeof obj['address'] !== 'string' || obj['address'].trim() === '') {
+  if (!Object.hasOwn(obj, 'address') || typeof obj['address'] !== 'string' || obj['address'].trim() === '') {
     json(res, 400, { error: 'address is required and must be a non-empty string' });
     return;
   }
-  if (typeof obj['apiKey'] !== 'string' || obj['apiKey'].trim() === '') {
+  if (!Object.hasOwn(obj, 'apiKey') || typeof obj['apiKey'] !== 'string' || obj['apiKey'].trim() === '') {
     json(res, 400, { error: 'apiKey is required and must be a non-empty string' });
     return;
   }
@@ -67,13 +67,13 @@ export async function handleProperty(
     if (err instanceof RentCastError) {
       // Map RentCast error codes to HTTP status codes.
       // Never include apiKey in error response or logs.
-      const statusMap: Record<string, number> = {
+      const statusMap: Record<RentCastErrorCode, number> = {
         bad_key:    401,
         not_found:  404,
         rate_limit: 402,
         unknown:    502,
       };
-      const status = statusMap[err.code] ?? 502;
+      const status = statusMap[err.code];
       json(res, status, { error: err.message });
       return;
     }
