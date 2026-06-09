@@ -1,4 +1,4 @@
-import { useState, useEffect, useId } from 'react';
+import { useState, useEffect, useId, useRef } from 'react';
 import { getRentCastKey, setRentCastKey, clearRentCastKey } from '../state/connectorStorage';
 
 interface ConnectorSettingsModalProps {
@@ -14,6 +14,7 @@ interface ConnectorSettingsModalProps {
  */
 export function ConnectorSettingsModal({ onClose }: ConnectorSettingsModalProps) {
   const titleId = useId();
+  const panelRef = useRef<HTMLDivElement>(null);
   const [storedKey, setStoredKey] = useState<string | null>(() => getRentCastKey());
   const [inputValue, setInputValue]   = useState('');
   const [isEditing, setIsEditing]     = useState(storedKey === null);
@@ -23,6 +24,35 @@ export function ConnectorSettingsModal({ onClose }: ConnectorSettingsModalProps)
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
   }, [onClose]);
+
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
+      const focusable = Array.from(
+        panel.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+        )
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0] as HTMLElement;
+      const last = focusable[focusable.length - 1] as HTMLElement;
+      if (e.shiftKey) {
+        if (document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    panel.addEventListener('keydown', handler);
+    return () => panel.removeEventListener('keydown', handler);
+  }, [isEditing]); // re-query focusable elements when editing state changes
 
   const handleSave = () => {
     const trimmed = inputValue.trim();
@@ -61,7 +91,7 @@ export function ConnectorSettingsModal({ onClose }: ConnectorSettingsModalProps)
       aria-modal="true"
       aria-labelledby={titleId}
     >
-      <div className="w-full max-w-md rounded-lg border border-border bg-base shadow-xl">
+      <div ref={panelRef} className="w-full max-w-md rounded-lg border border-border bg-base shadow-xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <h2 id={titleId} className="text-sm font-semibold text-hi">Settings</h2>

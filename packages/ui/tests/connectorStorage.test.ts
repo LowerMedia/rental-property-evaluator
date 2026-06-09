@@ -51,6 +51,17 @@ describe('connectorStorage', () => {
     expect(getRentCastKey()).toBe('new_key');
   });
 
+  it('getRentCastKey trims and returns null for whitespace-only stored value', () => {
+    // Directly set a whitespace-only value to simulate legacy storage
+    localStorage.setItem('rpe:connectors:rentcast', '   ');
+    expect(getRentCastKey()).toBeNull();
+  });
+
+  it('getRentCastKey trims surrounding whitespace from stored value', () => {
+    localStorage.setItem('rpe:connectors:rentcast', '  rc_live_abc  ');
+    expect(getRentCastKey()).toBe('rc_live_abc');
+  });
+
   it('getRentCastKey returns null when localStorage throws', () => {
     const broken = new LocalStorageMock();
     broken.getItem = () => { throw new Error('denied'); };
