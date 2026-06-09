@@ -8,8 +8,10 @@
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest';
 import type { Server } from 'node:http';
 import { createApp } from '../src/index';
+import { fetchPropertyData, RentCastError } from '@rpe/rentcast';
 
-// Mock the rentcast client before importing createApp (hoisted by vitest)
+// Vitest hoists vi.mock above all import statements, so @rpe/rentcast is stubbed
+// before createApp (and its route module that imports it) is evaluated.
 vi.mock('@rpe/rentcast', () => ({
   fetchPropertyData: vi.fn(),
   RentCastError: class RentCastError extends Error {
@@ -17,7 +19,6 @@ vi.mock('@rpe/rentcast', () => ({
   },
 }));
 
-import { fetchPropertyData, RentCastError } from '@rpe/rentcast';
 const mockFetch = vi.mocked(fetchPropertyData);
 
 const VALID_BODY = { address: '123 Main St, Austin TX 78701', apiKey: 'rc_test_key' };
