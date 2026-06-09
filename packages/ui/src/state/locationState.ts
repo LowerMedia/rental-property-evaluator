@@ -43,9 +43,10 @@ export function loadLocation(): LocationState {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_LOCATION;
     const parsed = JSON.parse(raw) as Partial<LocationState>;
-    const zip = typeof parsed.zip === 'string' ? parsed.zip : '';
-    const stateCode = typeof parsed.stateCode === 'string' ? parsed.stateCode : '';
-    const label = typeof parsed.label === 'string' ? parsed.label : '';
+    // Normalise on load: trim whitespace, uppercase stateCode
+    const zip = typeof parsed.zip === 'string' ? parsed.zip.trim() : '';
+    const stateCode = typeof parsed.stateCode === 'string' ? parsed.stateCode.trim().toUpperCase() : '';
+    const label = typeof parsed.label === 'string' ? parsed.label.trim() : '';
     return { zip, stateCode, label };
   } catch {
     return DEFAULT_LOCATION;
@@ -58,7 +59,13 @@ export function loadLocation(): LocationState {
  */
 export function saveLocation(loc: LocationState): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(loc));
+    // Normalise before persisting so stored payload is always clean
+    const normalized: LocationState = {
+      zip: loc.zip.trim(),
+      stateCode: loc.stateCode.trim().toUpperCase(),
+      label: loc.label.trim(),
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
   } catch {
     // ignore
   }

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   type LocationState,
   DEFAULT_LOCATION,
@@ -17,11 +17,14 @@ const localStorageMock = {
   removeItem: (key: string) => { delete store[key]; },
 };
 
-vi.stubGlobal('localStorage', localStorageMock);
-
 beforeEach(() => {
-  // Clear the store before each test
+  vi.stubGlobal('localStorage', localStorageMock);
+  // Reset store before each test so tests are order-independent
   Object.keys(store).forEach((k) => { delete store[k]; });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 // ─── isValidZip5 ──────────────────────────────────────────────────────────────
@@ -77,6 +80,11 @@ describe('loadLocation', () => {
     store['rpe_location'] = JSON.stringify({ zip: 12345, stateCode: null, label: 99 });
     expect(loadLocation()).toEqual({ zip: '', stateCode: '', label: '' });
   });
+
+  it('trims whitespace and uppercases stateCode on load', () => {
+    store['rpe_location'] = JSON.stringify({ zip: ' 78701 ', stateCode: 'tx', label: ' TX · 78701 ' });
+    expect(loadLocation()).toEqual({ zip: '78701', stateCode: 'TX', label: 'TX · 78701' });
+  });
 });
 
 // ─── saveLocation ─────────────────────────────────────────────────────────────
@@ -88,6 +96,12 @@ describe('saveLocation', () => {
     expect(store['rpe_location']).toBe(JSON.stringify(loc));
   });
 
+  it('normalises whitespace and casing before persisting', () => {
+    saveLocation({ zip: ' 78701 ', stateCode: 'tx', label: ' TX · 78701 ' });
+    const stored = JSON.parse(store['rpe_location']!) as LocationState;
+    expect(stored).toEqual({ zip: '78701', stateCode: 'TX', label: 'TX · 78701' });
+  });
+
   it('does not throw when localStorage throws', () => {
     const throwingMock = {
       getItem: () => null,
@@ -96,8 +110,7 @@ describe('saveLocation', () => {
     };
     vi.stubGlobal('localStorage', throwingMock);
     expect(() => saveLocation({ zip: '12345', stateCode: '', label: '' })).not.toThrow();
-    // Restore
-    vi.stubGlobal('localStorage', localStorageMock);
+    // afterEach will unstubAllGlobals; no manual restore needed
   });
 });
 
