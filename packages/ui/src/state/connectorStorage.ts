@@ -3,8 +3,8 @@
  *
  * Key: 'rpe:connectors:rentcast'
  *
- * The key belongs to the user — it is never sent anywhere except the
- * POST /property proxy call where the user explicitly triggers autofill.
+ * The key belongs to the user and is only read when the user explicitly
+ * triggers an autofill lookup.
  */
 
 const STORAGE_KEY = 'rpe:connectors:rentcast';

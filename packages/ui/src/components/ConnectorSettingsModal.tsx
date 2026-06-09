@@ -28,16 +28,18 @@ export function ConnectorSettingsModal({ onClose }: ConnectorSettingsModalProps)
     const trimmed = inputValue.trim();
     if (!trimmed) return;
     setRentCastKey(trimmed);
-    setStoredKey(trimmed);
+    const persisted = getRentCastKey();
+    setStoredKey(persisted);
     setInputValue('');
-    setIsEditing(false);
+    setIsEditing(persisted === null);
   };
 
   const handleRemove = () => {
     clearRentCastKey();
-    setStoredKey(null);
+    const persisted = getRentCastKey();
+    setStoredKey(persisted);
     setInputValue('');
-    setIsEditing(true);
+    setIsEditing(persisted === null);
   };
 
   const handleChange = () => {
@@ -45,9 +47,9 @@ export function ConnectorSettingsModal({ onClose }: ConnectorSettingsModalProps)
     setIsEditing(true);
   };
 
-  // Mask key: show last 4 chars, mask the rest
+  // Mask key: show last 4 chars, mask the rest (prefix-agnostic)
   const maskedKey = storedKey
-    ? `rc_live_${'•'.repeat(Math.max(0, storedKey.length - 12))}${storedKey.slice(-4)}`
+    ? `${'•'.repeat(Math.max(4, storedKey.length - 4))}${storedKey.slice(-4)}`
     : null;
 
   return (
