@@ -12,7 +12,7 @@
  *   - Purchase-price-dependent baselines (closing costs, taxes, insurance) are
  *     recomputed each time the purchase price changes.
  *   - getSimpleBaselines() accepts an optional LocationRateOverrides argument that
- *     replaces the static national-average tax, insurance, and vacancy values with
+ *     replaces the static national-average tax and insurance values with
  *     region-specific data from the useLocationDefaults hook (RPE-66).
  *   - applySimpleBaselines() is the evaluation path for simple mode ONLY.
  *     Calling it in complex mode is incorrect — complex mode passes inputs directly.
@@ -54,7 +54,12 @@ export interface SimpleBaselineValues {
 /**
  * Region-specific rate overrides supplied by the useLocationDefaults hook.
  * When provided to getSimpleBaselines(), these replace the static national-average
- * tax, insurance, and vacancy rates with location-specific data.
+ * tax and insurance rates with location-specific data.
+ *
+ * Vacancy is deliberately NOT part of this contract: vacancyPct is a visible,
+ * user-controlled simple-tier field, so applySimpleBaselines always takes it
+ * from the user's inputs — a location-based vacancy override would never reach
+ * evaluation.
  *
  * The interface is a structural subset of @rpe/region-defaults' RegionalRates,
  * so RegionalRates satisfies this type without an explicit cast.
@@ -64,8 +69,6 @@ export interface LocationRateOverrides {
   propertyTaxRate: number;
   /** 0–1 annual insurance premium as % of purchase price. */
   insuranceRate: number;
-  /** 0–1 vacancy rate (e.g. 0.068 for the national average). */
-  vacancyRate: number;
   /** Human-readable source description (e.g. 'TX state averages (Census ACS / NAIC 2022)'). */
   sourceLabel: string;
 }
@@ -80,8 +83,8 @@ export interface LocationRateOverrides {
  *
  * @param purchasePrice  The property's purchase price.
  * @param overrides      Optional location-based rate overrides (RPE-66).
- *                       When provided, replace national-average tax, insurance,
- *                       and vacancy with region-specific values.
+ *                       When provided, replace national-average tax and
+ *                       insurance with region-specific values.
  */
 export function getSimpleBaselines(
   purchasePrice: number,
@@ -90,7 +93,6 @@ export function getSimpleBaselines(
   const pp = purchasePrice > 0 ? purchasePrice : 0;
   const taxRate = overrides?.propertyTaxRate ?? 0.012;
   const insuranceRate = overrides?.insuranceRate ?? 0.005;
-  const vacancyPct = overrides ? parseFloat((overrides.vacancyRate * 100).toFixed(1)) : 5;
   return {
     // ── Financing ──────────────────────────────────────────────────────────
     interestRate: 7.0,
@@ -102,7 +104,8 @@ export function getSimpleBaselines(
 
     // ── Income ────────────────────────────────────────────────────────────
     otherIncome: 0,
-    vacancyPct,
+    /** 5 % vacancy — conservative national average; the visible field the user controls. */
+    vacancyPct: 5,
 
     // ── Expense settings ──────────────────────────────────────────────────
     capExInNOI: true,
