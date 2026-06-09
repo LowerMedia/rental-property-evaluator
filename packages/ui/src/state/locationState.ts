@@ -31,7 +31,7 @@ export const DEFAULT_LOCATION: LocationState = {
 };
 
 /** Exported so tests and other modules can reference the key without duplicating the string. */
-export const STORAGE_KEY = 'rpe_location';
+export const STORAGE_KEY = 'rpe:location:v1';
 
 // ─── Persistence ──────────────────────────────────────────────────────────────
 
