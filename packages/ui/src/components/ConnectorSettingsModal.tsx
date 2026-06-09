@@ -87,11 +87,14 @@ export function ConnectorSettingsModal({ onClose }: ConnectorSettingsModalProps)
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={titleId}
     >
-      <div ref={panelRef} className="w-full max-w-md rounded-lg border border-border bg-base shadow-xl">
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="w-full max-w-md rounded-lg border border-border bg-base shadow-xl"
+      >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <h2 id={titleId} className="text-sm font-semibold text-hi">Settings</h2>
