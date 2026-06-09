@@ -43,6 +43,10 @@ export async function handleProperty(
     return;
   }
 
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    json(res, 400, { error: 'Request body must be { address: string, apiKey: string }' });
+    return;
+  }
   const obj = parsed as Record<string, unknown>;
   if (typeof obj['address'] !== 'string' || obj['address'].trim() === '') {
     json(res, 400, { error: 'address is required and must be a non-empty string' });

@@ -141,6 +141,16 @@ describe('POST /property', () => {
     expect(res.status).toBe(402);
   });
 
+  it('returns 502 when fetchPropertyData throws unknown RentCast error', async () => {
+    mockFetch.mockRejectedValue(new RentCastError('unknown', 'unknown error'));
+    const res = await fetch(`${base}/property`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(VALID_BODY),
+    });
+    expect(res.status).toBe(502);
+  });
+
   // ── Security ────────────────────────────────────────────────────────────────
 
   it('apiKey value does not appear in response body on error', async () => {
