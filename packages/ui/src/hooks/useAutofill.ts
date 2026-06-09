@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import type { Dispatch } from 'react';
 import type { DealAction } from '../state/dealReducer';
 
@@ -31,7 +31,7 @@ export interface UseAutofillReturn {
 function httpStatusToMessage(status: number): string {
   if (status === 401) return 'Invalid API key — update it in ⚙ Settings.';
   if (status === 404) return 'Property not found. Check the address and try again.';
-  if (status === 402) return 'Rate limit reached (50 req/mo on the free tier).';
+  if (status === 429) return 'Rate limit reached (50 req/mo on the free tier).';
   return 'Lookup failed. Please try again.';
 }
 
@@ -46,9 +46,18 @@ export function useAutofill({
 
   const resolvedApiUrl = apiUrl ?? 'http://localhost:3001';
 
+  // Tracks the AbortController for the latest in-flight request so a new
+  // trigger() call can cancel a stale one and avoid out-of-order state updates.
+  const abortRef = useRef<AbortController | null>(null);
+
   const trigger = useCallback(
     async (address: string) => {
       if (!apiKey || !address.trim()) return;
+
+      // Cancel any in-flight request before starting a new one.
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
 
       setStatus('loading');
       setErrorMessage(null);
@@ -59,7 +68,10 @@ export function useAutofill({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ address: address.trim(), apiKey }),
+          signal: controller.signal,
         });
+
+        if (controller.signal.aborted) return;
 
         if (!res.ok) {
           setStatus('error');
@@ -68,9 +80,11 @@ export function useAutofill({
         }
 
         const body = (await res.json()) as { data: PropertyData };
+        if (controller.signal.aborted) return;
         setPreviewData(body.data);
         setStatus('preview');
-      } catch {
+      } catch (e) {
+        if (e instanceof Error && e.name === 'AbortError') return;
         setStatus('error');
         setErrorMessage('Network error — check that apps/api is running.');
       }

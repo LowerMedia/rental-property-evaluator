@@ -60,7 +60,11 @@ export function DealInputsForm({
     grossRent: state.grossRent,
     sqft: state.sqft ?? null,
     units: state.units ?? null,
-    annualTaxes: taxes.amount ?? null,
+    // Normalise to annual so the preview diff compares apples-to-apples with
+    // RentCast's annualTaxes, which is always an annual figure.
+    annualTaxes: taxes.amount != null
+      ? taxes.period === 'monthly' ? taxes.amount * 12 : taxes.amount
+      : null,
   };
   const insurance = expenses.insurance as ExpenseInput;
   const hoa = expenses.hoa ?? { amount: 0, period: 'monthly' as const };

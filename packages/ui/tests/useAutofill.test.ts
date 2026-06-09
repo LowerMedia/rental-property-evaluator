@@ -85,8 +85,8 @@ describe('useAutofill', () => {
     expect(result.current.errorMessage).toMatch(/not found/i);
   });
 
-  it('transitions to error on 402 (rate_limit)', async () => {
-    mockFetchError(402, 'Rate limit exceeded');
+  it('transitions to error on 429 (rate_limit)', async () => {
+    mockFetchError(429, 'Rate limit exceeded');
     const { result } = renderHook(() => useAutofill({ dispatch, apiKey: 'key', apiUrl: 'http://localhost:3001' }));
 
     await act(async () => { await result.current.trigger('123 Main St'); });
