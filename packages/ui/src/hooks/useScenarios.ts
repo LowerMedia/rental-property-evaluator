@@ -1,9 +1,11 @@
 import { useState, useCallback, useEffect } from 'react';
 import type { Dispatch } from 'react';
+import { EXAMPLE_DEAL_INPUTS } from '@rpe/engine';
 import type { DealInputs } from '@rpe/engine';
 import type { DealAction } from '../state/dealReducer';
 import {
   createScenario,
+  addNamedScenario,
   addScenario,
   removeScenario,
   renameScenario,
@@ -28,6 +30,8 @@ export interface UseScenariosReturn {
   dispatchToIdx: (idx: number, action: DealAction) => void;
   /** Add a new scenario (clone of active inputs, or defaults). */
   addScenario: () => void;
+  /** Load the golden Example deal as a new scenario (RPE-68). */
+  addExampleScenario: () => void;
   /** Remove scenario at idx; adjusts activeIdx if needed. */
   removeScenario: (idx: number) => void;
   /** Rename scenario at idx. */
@@ -94,6 +98,14 @@ export function useScenarios(): UseScenariosReturn {
     });
   }, [activeIdx]);
 
+  const handleAddExampleScenario = useCallback(() => {
+    setScenarios((prev) => {
+      const next = addNamedScenario(prev, 'Example', EXAMPLE_DEAL_INPUTS);
+      if (next !== prev) setActiveIdxState(next.length - 1);
+      return next;
+    });
+  }, []);
+
   const handleRemoveScenario = useCallback(
     (idx: number) => {
       setScenarios((prev) => {
@@ -124,6 +136,7 @@ export function useScenarios(): UseScenariosReturn {
     dispatchToActive,
     dispatchToIdx,
     addScenario: handleAddScenario,
+    addExampleScenario: handleAddExampleScenario,
     removeScenario: handleRemoveScenario,
     renameScenario: handleRenameScenario,
     replaceScenarioInputs,

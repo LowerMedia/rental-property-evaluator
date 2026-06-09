@@ -202,3 +202,25 @@ describe('replaceInputs', () => {
     expect(result).toBe(scenarios);
   });
 });
+
+// ─── RPE-68: addNamedScenario (Load Example) ─────────────────────────────────
+
+import { addNamedScenario } from '../src/state/scenarios';
+import { EXAMPLE_DEAL_INPUTS } from '@rpe/engine';
+
+describe('addNamedScenario (RPE-68)', () => {
+  it('appends a scenario with the given name and a deep copy of the inputs', () => {
+    const start = [createScenario('Scenario 1')];
+    const next = addNamedScenario(start, 'Example', EXAMPLE_DEAL_INPUTS);
+
+    expect(next).toHaveLength(2);
+    expect(next[1]?.name).toBe('Example');
+    expect(next[1]?.inputs).toEqual(EXAMPLE_DEAL_INPUTS);
+    expect(next[1]?.inputs).not.toBe(EXAMPLE_DEAL_INPUTS); // deep copy, not a reference
+  });
+
+  it('is a no-op at MAX_SCENARIOS', () => {
+    const full = [1, 2, 3, 4].map((n) => createScenario(`Scenario ${n}`));
+    expect(addNamedScenario(full, 'Example', EXAMPLE_DEAL_INPUTS)).toBe(full);
+  });
+});

@@ -427,6 +427,7 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
     activeInputs,
     dispatchToActive,
     addScenario,
+    addExampleScenario,
     removeScenario,
     renameScenario,
     replaceScenarioInputs,
@@ -695,6 +696,7 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
             activeIdx={activeIdx}
             onSelect={setActiveIdx}
             onAdd={addScenario}
+            onAddExample={addExampleScenario}
             onRemove={removeScenario}
             onRename={renameScenario}
           />

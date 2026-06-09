@@ -28,6 +28,7 @@ export { calcProjection } from './projection';
 export { calcProForma } from './proforma';
 export { calcIRR, calcNPV } from './irr';
 export { SCREENER_METRIC_CONFIG } from './directions';
+export { EXAMPLE_DEAL_INPUTS, EXAMPLE_DEAL_EXPECTED } from './exampleDeal';
 export type { MetricDirection, MetricConfig } from './directions';
 
 import type { DealInputs, EvalOptions, Results } from './types';
