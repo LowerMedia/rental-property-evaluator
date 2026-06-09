@@ -16,6 +16,8 @@ import { fmtCurrency, fmtPercent, fmtNumber, fmtMultiplier, NULL_DISPLAY } from 
 import type { SavedDeal } from './state/savedDealsSchema';
 import { SIMPLE_RESULT_KEYS, type UiMode } from './state/uiMode';
 import { applySimpleBaselines } from './state/simpleBaselines';
+import { ConnectorSettingsModal } from './components/ConnectorSettingsModal';
+import { getRentCastKey } from './state/connectorStorage';
 
 // ─── Metric helpers ───────────────────────────────────────────────────────────
 
@@ -445,6 +447,15 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
     }
   }, [proFormaMode]);
 
+  const [showSettings, setShowSettings] = useState(false);
+  const [apiKey, setApiKey] = useState<string | null>(() => getRentCastKey());
+
+  // Refresh apiKey after the modal closes (user may have saved or removed)
+  const handleCloseSettings = useCallback(() => {
+    setShowSettings(false);
+    setApiKey(getRentCastKey());
+  }, []);
+
   /** Seed pro-forma defaults into state the first time the user enters pro-forma mode. */
   const handleSetProFormaMode = useCallback((pf: boolean) => {
     setProFormaMode(pf);
@@ -533,6 +544,20 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
           <span className="hidden text-xs text-lo sm:inline">{proFormaMode ? 'Pro-Forma' : 'Screener'}</span>
         </div>
         <div className="no-print flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowSettings(true)}
+            className="
+              rounded border border-border px-3 py-1.5
+              text-xs text-mid uppercase tracking-widest
+              hover:border-accent hover:text-accent
+              transition-colors
+            "
+            aria-label="Open settings"
+            title="Settings"
+          >
+            ⚙
+          </button>
           <UiModeToggle uiMode={uiMode} onChange={handleSetUiMode} />
           <ModeToggle
             proFormaMode={proFormaMode}
@@ -610,6 +635,7 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
               dispatch={dispatchToActive}
               proFormaMode={proFormaMode}
               uiMode={uiMode}
+              apiKey={apiKey}
             />
           </div>
         </aside>
@@ -647,6 +673,8 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
           )}
         </section>
       </main>
+
+      {showSettings && <ConnectorSettingsModal onClose={handleCloseSettings} />}
     </div>
   );
 }
