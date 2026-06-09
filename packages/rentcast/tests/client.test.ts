@@ -34,6 +34,9 @@ const PROPERTIES_RESPONSE  = [
   {
     squareFootage: 1_480,
     units: 1,
+    bedrooms: 3,
+    bathrooms: 2,
+    yearBuilt: 1987,
     // propertyTaxes is a record keyed by tax year: { "2023": { total: 4210 } }
     // If the field name or shape differs in the live API, adjust here + in client.ts
     propertyTaxes: { '2023': { total: 4_210 } },
@@ -48,7 +51,7 @@ describe('fetchPropertyData', () => {
   });
 
   describe('happy path', () => {
-    it('returns all five fields when all three calls succeed', async () => {
+    it('returns all fields when all three calls succeed', async () => {
       vi.spyOn(globalThis, 'fetch')
         .mockResolvedValueOnce(mockOk(AVM_VALUE_RESPONSE))
         .mockResolvedValueOnce(mockOk(AVM_RENT_RESPONSE))
@@ -61,6 +64,9 @@ describe('fetchPropertyData', () => {
       expect(result.sqft).toBe(1_480);
       expect(result.units).toBe(1);
       expect(result.annualTaxes).toBe(4_210);
+      expect(result.bedrooms).toBe(3);
+      expect(result.bathrooms).toBe(2);
+      expect(result.yearBuilt).toBe(1987);
     });
 
     it('calls fetch exactly three times (once per endpoint)', async () => {
