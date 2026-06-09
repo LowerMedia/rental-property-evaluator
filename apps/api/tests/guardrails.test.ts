@@ -135,6 +135,17 @@ describe('RateLimiter', () => {
     expect(limiter.check('ip-b').allowed).toBe(true);
     expect(limiter.check('ip-a').allowed).toBe(false);
   });
+
+  it('bounds memory under a key-rotation flood by evicting oldest live keys', () => {
+    const limiter = new RateLimiter(10, 100, () => 0, 3);
+    for (let i = 0; i < 50; i++) {
+      expect(limiter.check(`spoofed-${i}`).allowed).toBe(true);
+    }
+    // Internals: both maps stay at/below maxKeys despite 50 live keys
+    const maps = limiter as unknown as { perMinute: Map<string, unknown>; perDay: Map<string, unknown> };
+    expect(maps.perMinute.size).toBeLessThanOrEqual(3);
+    expect(maps.perDay.size).toBeLessThanOrEqual(3);
+  });
 });
 
 // ─── Integration: /property with guardrails ──────────────────────────────────
