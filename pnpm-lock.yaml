@@ -172,6 +172,10 @@ importers:
         version: 5.9.3
 
   packages/property:
+    dependencies:
+      '@rpe/engine':
+        specifier: workspace:*
+        version: link:../engine
     devDependencies:
       typescript:
         specifier: 'catalog:'
