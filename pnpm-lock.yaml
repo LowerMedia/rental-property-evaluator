@@ -185,6 +185,9 @@ importers:
       '@rpe/engine':
         specifier: workspace:*
         version: link:../engine
+      '@rpe/region-defaults':
+        specifier: workspace:*
+        version: link:../region-defaults
       react:
         specifier: ^18.0.0
         version: 18.3.1

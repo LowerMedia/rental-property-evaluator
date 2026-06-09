@@ -14,6 +14,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
+import type { RegionLevel } from '@rpe/region-defaults';
 import type { LocationRateOverrides } from '../state/simpleBaselines';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -29,7 +30,7 @@ export interface RegionDefaults extends LocationRateOverrides {
   vacancyRate: number;
   appreciationRate: number;
   rentGrowthRate: number;
-  resolvedLevel: string;
+  resolvedLevel: RegionLevel;
   rent: {
     studio: number | null;
     oneBed: number | null;
@@ -48,6 +49,8 @@ export interface LocationDefaultsResult {
   label: string;
   /** True while the /region API call is in-flight. */
   resolving: boolean;
+  /** True when the last lookup failed (network/HTTP error) — cleared on the next fetch. */
+  failed: boolean;
 }
 
 // ─── Internal API response type ───────────────────────────────────────────────
@@ -61,7 +64,7 @@ interface RegionApiResponse {
   vacancyRate: number;
   appreciationRate: number;
   rentGrowthRate: number;
-  resolvedLevel: string;
+  resolvedLevel: RegionLevel;
   sourceLabel: string;
   rent: {
     studio: number | null;
@@ -77,6 +80,7 @@ const EMPTY: LocationDefaultsResult = {
   stateCode: '',
   label: '',
   resolving: false,
+  failed: false,
 };
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -133,13 +137,19 @@ export function useLocationDefaults(zip: string, apiUrl: string): LocationDefaul
           stateCode: data.stateCode,
           label: data.label,
           resolving: false,
+          failed: false,
         });
       })
-      .catch((err: unknown) => {
-        if ((err as Error).name === 'AbortError') return;
+      .catch(() => {
+        // Guard on the signal (covers both abort rejections AND late
+        // failures of an already-superseded request, e.g. a parse error
+        // surfacing after the next fetch has started — without this, a
+        // stale request would clobber the new one's resolving state).
+        if (controller.signal.aborted) return;
         // Network error or non-OK response — full reset so no stale
-        // stateCode/label lingers in the UI or syncs into persisted state
-        setResult(EMPTY);
+        // stateCode/label lingers, with failed=true so the UI can tell
+        // the user instead of showing the ZIP as pending forever
+        setResult({ ...EMPTY, failed: true });
       });
 
     return () => {

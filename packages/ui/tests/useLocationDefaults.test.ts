@@ -214,9 +214,10 @@ describe('useLocationDefaults', () => {
     expect(result.current.rates).toBeNull();
     expect(result.current.stateCode).toBe('');
     expect(result.current.label).toBe('');
+    expect(result.current.failed).toBe(true);
   });
 
-  it('degrades gracefully on HTTP error response', async () => {
+  it('degrades gracefully on HTTP error response and sets failed', async () => {
     mockFetchError(404);
     const { result } = renderHook(() =>
       useLocationDefaults('99999', API_URL),
@@ -226,9 +227,10 @@ describe('useLocationDefaults', () => {
 
     expect(result.current.rates).toBeNull();
     expect(result.current.stateCode).toBe('');
+    expect(result.current.failed).toBe(true);
   });
 
-  it('degrades gracefully on network error', async () => {
+  it('degrades gracefully on network error and sets failed', async () => {
     mockFetchNetworkError();
     const { result } = renderHook(() =>
       useLocationDefaults('12345', API_URL),
@@ -237,6 +239,31 @@ describe('useLocationDefaults', () => {
     await waitFor(() => expect(result.current.resolving).toBe(false));
 
     expect(result.current.rates).toBeNull();
+    expect(result.current.failed).toBe(true);
+  });
+
+  it('clears failed when a new fetch starts and on success', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockRejectedValueOnce(new Error('Network failure'))
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(makeMockRegionResponse()),
+      } as unknown as Response);
+
+    const { result, rerender } = renderHook(
+      ({ zip }) => useLocationDefaults(zip, API_URL),
+      { initialProps: { zip: '78701' } },
+    );
+    await waitFor(() => expect(result.current.failed).toBe(true));
+
+    act(() => { rerender({ zip: '90001' }); });
+    // failed clears synchronously when the new fetch starts
+    expect(result.current.failed).toBe(false);
+    expect(result.current.resolving).toBe(true);
+
+    await waitFor(() => expect(result.current.stateCode).toBe('TX'));
+    expect(result.current.failed).toBe(false);
   });
 
   it('includes national rates when resolvedLevel is "national"', async () => {
