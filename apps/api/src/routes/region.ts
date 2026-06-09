@@ -7,8 +7,10 @@
  *   {
  *     zip:              string,   // input ZIP5
  *     stateCode:        string,   // 2-letter US state code ('' if unresolved)
- *     label:            string,   // human-readable e.g. 'Austin, TX (78701)' when HUD
- *                                 // resolves a town/county, 'TX · 78701' otherwise
+ *     label:            string,   // human-readable — 'Austin, TX (78701)' when HUD
+ *                                 // resolves a town/county, 'TX · 78701' when only the
+ *                                 // state resolves, or just the zip when unresolved
+ *                                 // (no HUD_TOKEN or HUD failure)
  *     propertyTaxRate:  number,   // 0–1 effective rate
  *     insuranceRate:    number,   // 0–1 annual premium as % of purchase price
  *     vacancyRate:      number,   // 0–1
@@ -28,6 +30,7 @@
  *
  * Error responses:
  *   400 { error: string }  — missing or invalid zip parameter
+ *   405 { error: string }  — method other than GET
  *   500 { error: string }  — internal error
  *
  * HUD SAFMR API:
