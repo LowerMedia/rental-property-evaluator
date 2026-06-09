@@ -23,7 +23,7 @@ export default defineConfig({
     sourcemap: true,
   },
   ssr: {
-    noExternal: ['@rpe/engine'],
+    noExternal: ['@rpe/engine', '@rpe/rentcast'],
   },
   resolve: {
     conditions: ['import', 'default'],

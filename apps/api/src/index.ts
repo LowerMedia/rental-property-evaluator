@@ -43,6 +43,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { evaluate } from '@rpe/engine';
 import type { DealInputs, EvalOptions } from '@rpe/engine';
+import { handleProperty } from './routes/property.js';
 
 // Hoist __filename/__dirname for use in VERSION and the entry-point guard below.
 const __filename = fileURLToPath(import.meta.url);
@@ -351,6 +352,8 @@ export function createApp() {
     const asyncHandler =
       url === '/evaluate' || url === '/evaluate/'
         ? () => handleEvaluate(req, res)
+        : url === '/property' || url === '/property/'
+        ? () => handleProperty(req, res, json, readBody)
         : () => {
             json(res, 404, { error: `Unknown endpoint: ${url}` });
             return Promise.resolve();
@@ -375,6 +378,7 @@ if (resolve(process.argv[1] ?? '') === __filename) {
     console.log(`@rpe/api ${VERSION} listening on http://${host}:${port}`);
     console.log('  GET  /health');
     console.log('  POST /evaluate');
+    console.log('  POST /property');
   });
   server.on('error', (err) => {
     console.error('Server error:', err);
