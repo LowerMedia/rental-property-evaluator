@@ -7,15 +7,19 @@
  *
  * Lifecycle:
  *   1. zip='' → no fetch; all fields empty/null, resolving=false
- *   2. zip changes → in-flight request cancelled; prior resolved values
- *      cleared immediately (no stale leak); resolving=true
- *   3. API succeeds → rates/stateCode/label populated; resolving=false
- *   4. API fails → full reset to empty (caller degrades gracefully)
+ *   2. zip changes → in-flight request cancelled; a fresh cache entry
+ *      (30-day TTL, see regionCache) resolves synchronously with no fetch;
+ *      otherwise prior resolved values are cleared immediately (no stale
+ *      leak) and resolving=true
+ *   3. API succeeds → rates/stateCode/label populated, cached; resolving=false
+ *   4. API fails → full reset to empty (caller degrades gracefully);
+ *      failures are never cached
  */
 
 import { useState, useEffect, useRef } from 'react';
 import type { RegionLevel } from '@rpe/region-defaults';
 import type { LocationRateOverrides } from '../state/simpleBaselines';
+import { readRegionCache, writeRegionCache } from '../state/regionCache';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -53,9 +57,10 @@ export interface LocationDefaultsResult {
   failed: boolean;
 }
 
-// ─── Internal API response type ───────────────────────────────────────────────
+// ─── API response type ────────────────────────────────────────────────────────
 
-interface RegionApiResponse {
+/** Raw /region response shape — also the unit cached by regionCache. */
+export interface RegionApiResponse {
   zip: string;
   stateCode: string;
   label: string;
@@ -83,6 +88,26 @@ const EMPTY: LocationDefaultsResult = {
   failed: false,
 };
 
+/** Map a /region response (live or cached) to the hook's resolved state. */
+function toResolvedResult(data: RegionApiResponse): LocationDefaultsResult {
+  return {
+    rates: {
+      propertyTaxRate: data.propertyTaxRate,
+      insuranceRate: data.insuranceRate,
+      vacancyRate: data.vacancyRate,
+      appreciationRate: data.appreciationRate,
+      rentGrowthRate: data.rentGrowthRate,
+      resolvedLevel: data.resolvedLevel,
+      sourceLabel: data.sourceLabel,
+      rent: data.rent,
+    },
+    stateCode: data.stateCode,
+    label: data.label,
+    resolving: false,
+    failed: false,
+  };
+}
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 /**
@@ -105,6 +130,14 @@ export function useLocationDefaults(zip: string, apiUrl: string): LocationDefaul
 
     // Cancel any previous in-flight request
     abortRef.current?.abort();
+
+    // Fresh cache entry → resolve synchronously, no network call
+    const cached = readRegionCache(zip);
+    if (cached) {
+      setResult(toResolvedResult(cached));
+      return;
+    }
+
     const controller = new AbortController();
     abortRef.current = controller;
 
@@ -122,23 +155,8 @@ export function useLocationDefaults(zip: string, apiUrl: string): LocationDefaul
       })
       .then((data) => {
         if (controller.signal.aborted) return;
-        const rates: RegionDefaults = {
-          propertyTaxRate: data.propertyTaxRate,
-          insuranceRate: data.insuranceRate,
-          vacancyRate: data.vacancyRate,
-          appreciationRate: data.appreciationRate,
-          rentGrowthRate: data.rentGrowthRate,
-          resolvedLevel: data.resolvedLevel,
-          sourceLabel: data.sourceLabel,
-          rent: data.rent,
-        };
-        setResult({
-          rates,
-          stateCode: data.stateCode,
-          label: data.label,
-          resolving: false,
-          failed: false,
-        });
+        writeRegionCache(zip, data);
+        setResult(toResolvedResult(data));
       })
       .catch(() => {
         // Guard on the signal (covers both abort rejections AND late
