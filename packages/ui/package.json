@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@rpe/engine": "workspace:*",
+    "@rpe/property": "workspace:*",
     "@rpe/region-defaults": "workspace:*"
   },
   "devDependencies": {
