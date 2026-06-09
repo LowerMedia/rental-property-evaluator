@@ -1,4 +1,5 @@
 export {
+  LOOKUP_FIELD_KEYS,
   TIER_ORDER,
   type LookupTier,
   type LookupConfidence,

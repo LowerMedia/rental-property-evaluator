@@ -42,16 +42,20 @@ export interface LookupField {
  * Field keys a lookup can populate. Names align with DealInputs
  * (purchasePrice, grossRent, sqft, units) and with the flat annualTaxes /
  * annualInsurance amounts that the mapping story (RPE-50) converts into
- * DealInputs.expenses entries.
+ * DealInputs.expenses entries. Single source of truth — the resolver's
+ * foreign-key filter derives from this array.
  */
-export type LookupFieldKey =
-  | 'purchasePrice'
-  | 'grossRent'
-  | 'sqft'
-  | 'units'
-  | 'annualTaxes'
-  | 'annualInsurance'
-  | 'yearBuilt';
+export const LOOKUP_FIELD_KEYS = [
+  'purchasePrice',
+  'grossRent',
+  'sqft',
+  'units',
+  'annualTaxes',
+  'annualInsurance',
+  'yearBuilt',
+] as const;
+
+export type LookupFieldKey = (typeof LOOKUP_FIELD_KEYS)[number];
 
 /**
  * A partial, provenance-tagged set of deal inputs — the result of one
