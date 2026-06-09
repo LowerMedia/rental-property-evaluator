@@ -24,6 +24,8 @@ export interface DealInputsFormProps {
    * - 'complex' — shows all sections (default, current behaviour).
    */
   uiMode?: UiMode;
+  /** RentCast API key from connectorStorage. Passed to AutofillBar (wired in RPE-43d). */
+  apiKey?: string | null;
 }
 
 /**
@@ -40,6 +42,7 @@ export function DealInputsForm({
   dispatch,
   proFormaMode = false,
   uiMode = 'complex',
+  apiKey: _apiKey,  // unused until RPE-43d
 }: DealInputsFormProps) {
   const { expenses } = state;
   const simple = uiMode === 'simple';
