@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { isValidZip5 } from '../state/locationState';
+import { isValidZip5, extractZip } from '../state/locationState';
 
 export interface LocationInputProps {
   /** Current ZIP ('' = not yet set). */
@@ -39,19 +39,6 @@ export function LocationInput({
   const [validationError, setValidationError] = useState('');
 
   const isResolved = zip !== '' && stateCode !== '';
-
-  const extractZip = (value: string): string => {
-    const trimmed = value.trim();
-    // All-digit input: require exactly 5 — never silently truncate "123456" → "23456"
-    if (/^\d+$/.test(trimmed)) {
-      return /^\d{5}$/.test(trimmed) ? trimmed : '';
-    }
-    // ZIP+4 or "City, ST XXXXX[-XXXX]": trailing ZIP5 (optionally +4, which is
-    // dropped) must start the string or be preceded by a non-digit — never
-    // extract a ZIP from a longer digit run ("City, ST 123456" → '')
-    const match = trimmed.match(/(?:^|[^\d])(\d{5})(?:-\d{4})?$/);
-    return match ? (match[1] ?? '') : '';
-  };
 
   const handleSubmit = () => {
     const z = extractZip(draft);

@@ -7,6 +7,7 @@ import {
   saveLocation,
   clearLocationStorage,
   isValidZip5,
+  extractZip,
 } from '../src/state/locationState';
 
 // ─── localStorage mock ────────────────────────────────────────────────────────
@@ -51,6 +52,43 @@ describe('isValidZip5', () => {
 
   it('rejects strings with only whitespace', () => {
     expect(isValidZip5('     ')).toBe(false);
+  });
+});
+
+// ─── extractZip ───────────────────────────────────────────────────────────────
+
+describe('extractZip', () => {
+  it('accepts a plain ZIP5', () => {
+    expect(extractZip('78701')).toBe('78701');
+    expect(extractZip('  78701  ')).toBe('78701');
+  });
+
+  it('rejects all-digit input of the wrong length (no silent truncation)', () => {
+    expect(extractZip('1234')).toBe('');
+    expect(extractZip('123456')).toBe('');
+  });
+
+  it('extracts the ZIP5 prefix from ZIP+4', () => {
+    expect(extractZip('78701-1234')).toBe('78701');
+    expect(extractZip('  78701-1234  ')).toBe('78701');
+  });
+
+  it('rejects a malformed +4 suffix', () => {
+    expect(extractZip('78701-12')).toBe('');
+  });
+
+  it('extracts a trailing ZIP5 from "City, ST XXXXX" input', () => {
+    expect(extractZip('Austin, TX 78701')).toBe('78701');
+    expect(extractZip('Austin, TX 78701-1234')).toBe('78701');
+  });
+
+  it('never extracts a ZIP from a longer trailing digit run', () => {
+    expect(extractZip('City, ST 123456')).toBe('');
+  });
+
+  it('returns empty string when no ZIP is present', () => {
+    expect(extractZip('')).toBe('');
+    expect(extractZip('Austin, TX')).toBe('');
   });
 });
 
