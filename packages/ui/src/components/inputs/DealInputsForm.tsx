@@ -8,6 +8,7 @@ import { PercentInput } from './PercentInput';
 import { NumberInput } from './NumberInput';
 import { ToggleInput } from './ToggleInput';
 import { FixedExpenseRow } from './FixedExpenseRow';
+import { AutofillBar } from '../AutofillBar';
 
 export interface DealInputsFormProps {
   state: DealInputs;
@@ -42,7 +43,7 @@ export function DealInputsForm({
   dispatch,
   proFormaMode = false,
   uiMode = 'complex',
-  apiKey: _apiKey,  // unused until RPE-43d
+  apiKey = null,
 }: DealInputsFormProps) {
   const { expenses } = state;
   const simple = uiMode === 'simple';
@@ -55,6 +56,9 @@ export function DealInputsForm({
 
   return (
     <div>
+      {/* ── Autofill bar (always shown, adapts when apiKey is null) ──────── */}
+      <AutofillBar dispatch={dispatch} apiKey={apiKey} />
+
       {/* ── Acquisition ──────────────────────────────────────────────────── */}
       <InputSection title="Acquisition">
         <CurrencyInput
