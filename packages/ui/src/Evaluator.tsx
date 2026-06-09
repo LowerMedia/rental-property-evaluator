@@ -471,7 +471,7 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
   /**
    * Location state for regional assumption defaults (RPE-64).
    * zip='' means no location set. stateCode/label are populated after API resolution.
-   * Persisted to localStorage as 'rpe_location'.
+   * Persisted to localStorage under locationState's STORAGE_KEY.
    */
   const [location, setLocation] = useState<LocationState>(() => loadLocation());
 
