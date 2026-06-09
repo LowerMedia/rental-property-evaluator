@@ -33,7 +33,8 @@ export interface DealInputsFormProps {
   apiUrl?: string;
   /**
    * Current location state for regional assumption defaults (RPE-64).
-   * When provided, renders LocationInput below AutofillBar.
+   * LocationInput renders below AutofillBar when both onZipChange and
+   * onLocationClear are provided; this prop supplies its display values.
    */
   location?: LocationState;
   /** True while useLocationDefaults is resolving the ZIP → region. */
