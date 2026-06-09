@@ -21,3 +21,9 @@ export {
   type ListingUrlResult,
   type ParsedListing,
 } from './listingUrl';
+
+export {
+  createRentCastProxyProvider,
+  ProviderError,
+  type RentCastProxyOptions,
+} from './providers/rentcastProxy';

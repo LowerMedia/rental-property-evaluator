@@ -53,6 +53,8 @@ export const LOOKUP_FIELD_KEYS = [
   'annualTaxes',
   'annualInsurance',
   'yearBuilt',
+  'bedrooms',
+  'bathrooms',
 ] as const;
 
 export type LookupFieldKey = (typeof LOOKUP_FIELD_KEYS)[number];
