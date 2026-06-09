@@ -50,4 +50,11 @@ describe('connectorStorage', () => {
     setRentCastKey('new_key');
     expect(getRentCastKey()).toBe('new_key');
   });
+
+  it('getRentCastKey returns null when localStorage throws', () => {
+    const broken = { ...localStorage, getItem: () => { throw new Error('denied'); } };
+    vi.stubGlobal('localStorage', broken);
+    expect(getRentCastKey()).toBeNull();
+    vi.unstubAllGlobals();
+  });
 });
