@@ -43,6 +43,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { evaluate } from '@rpe/engine';
 import type { DealInputs, EvalOptions } from '@rpe/engine';
+import { handleGeocode, type GeocodeDeps, type GeocodeSuccessBody } from './routes/geocode.js';
 import { handleProperty, type PropertyDeps, type PropertySuccessBody } from './routes/property.js';
 import { handleRegion } from './routes/region.js';
 import { RateLimiter, TtlCache } from './services/guardrails.js';
@@ -345,6 +346,12 @@ export interface AppConfig {
     rpm?: number;
     dailyCap?: number;
   };
+  /** /geocode guardrails (RPE-46). Env: RPE_GEOCODE_RPM (default 60),
+   * RPE_GEOCODE_DAILY_CAP (default 1000); cache shares the property TTL knob. */
+  geocode?: {
+    rpm?: number;
+    dailyCap?: number;
+  };
 }
 
 function envInt(name: string, fallback: number): number {
@@ -362,6 +369,18 @@ export function createApp(config: AppConfig = {}) {
     limiter: new RateLimiter(
       config.property?.rpm ?? envInt('RPE_PROPERTY_RPM', 30),
       config.property?.dailyCap ?? envInt('RPE_PROPERTY_DAILY_CAP', 300),
+    ),
+  };
+
+  // Address geometry does not move — geocode answers cache on the same
+  // TTL knob as property lookups (RPE-46)
+  const geocodeDeps: GeocodeDeps = {
+    cache: new TtlCache<GeocodeSuccessBody>(
+      config.property?.cacheTtlMs ?? envInt('RPE_PROPERTY_CACHE_TTL_MS', 24 * 60 * 60 * 1000),
+    ),
+    limiter: new RateLimiter(
+      config.geocode?.rpm ?? envInt('RPE_GEOCODE_RPM', 60),
+      config.geocode?.dailyCap ?? envInt('RPE_GEOCODE_DAILY_CAP', 1000),
     ),
   };
 
@@ -389,6 +408,8 @@ export function createApp(config: AppConfig = {}) {
         ? () => handleProperty(req, res, json, readBody, propertyDeps)
         : url === '/region' || url === '/region/'
         ? () => handleRegion(req, res, json)
+        : url === '/geocode' || url === '/geocode/'
+        ? () => handleGeocode(req, res, json, geocodeDeps)
         : () => {
             json(res, 404, { error: `Unknown endpoint: ${url}` });
             return Promise.resolve();
@@ -415,6 +436,7 @@ if (resolve(process.argv[1] ?? '') === __filename) {
     console.log('  POST /evaluate');
     console.log('  POST /property');
     console.log('  GET  /region?zip=XXXXX');
+    console.log('  GET  /geocode?q=<address>');
   });
   server.on('error', (err) => {
     console.error('Server error:', err);
