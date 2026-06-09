@@ -30,6 +30,9 @@ const MOCK_DATA = {
   sqft: 1_480,
   units: 1,
   annualTaxes: 4_210,
+  bedrooms: 3,
+  bathrooms: 2,
+  yearBuilt: 1987,
 };
 
 // ─── Unit: address normalization ─────────────────────────────────────────────
@@ -265,7 +268,15 @@ describe('POST /property — guardrails integration', () => {
   });
 
   it('omits null record fields from the lookup envelope', async () => {
-    mockFetch.mockResolvedValue({ ...MOCK_DATA, sqft: null, units: null, annualTaxes: null });
+    mockFetch.mockResolvedValue({
+      ...MOCK_DATA,
+      sqft: null,
+      units: null,
+      annualTaxes: null,
+      bedrooms: null,
+      bathrooms: null,
+      yearBuilt: null,
+    });
     const s = await startServer({ property: { cacheTtlMs: 0, rpm: 100, dailyCap: 1000 } });
     server = s.server;
 

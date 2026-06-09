@@ -37,5 +37,14 @@ export function toPropertyLookup(data: PropertyData): PropertyLookup {
   if (data.annualTaxes !== null && Number.isFinite(data.annualTaxes)) {
     lookup.annualTaxes = field(data.annualTaxes, 'high');
   }
+  if (data.bedrooms !== null && Number.isFinite(data.bedrooms)) {
+    lookup.bedrooms = field(data.bedrooms, 'high');
+  }
+  if (data.bathrooms !== null && Number.isFinite(data.bathrooms)) {
+    lookup.bathrooms = field(data.bathrooms, 'high');
+  }
+  if (data.yearBuilt !== null && Number.isFinite(data.yearBuilt)) {
+    lookup.yearBuilt = field(data.yearBuilt, 'high');
+  }
   return lookup;
 }
