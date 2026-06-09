@@ -41,7 +41,7 @@ function isRegionApiResponse(value: unknown): value is RegionApiResponse {
     typeof v.vacancyRate === 'number' &&
     typeof v.appreciationRate === 'number' &&
     typeof v.rentGrowthRate === 'number' &&
-    (v.rent === null || typeof v.rent === 'object')
+    (v.rent === null || (typeof v.rent === 'object' && !Array.isArray(v.rent)))
   );
 }
 

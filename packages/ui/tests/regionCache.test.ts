@@ -122,6 +122,15 @@ describe('regionCache', () => {
     expect(readRegionCache('78701')).toBeNull();
   });
 
+  it('ignores data where rent is an array (typeof object, wrong shape)', () => {
+    const data = makeResponse();
+    localStorage.setItem(
+      regionCacheKey('78701'),
+      JSON.stringify({ v: 1, ts: Date.now(), data: { ...data, rent: [1050, 1230] } }),
+    );
+    expect(readRegionCache('78701')).toBeNull();
+  });
+
   it('treats a throwing localStorage.getItem as a miss', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('SecurityError');
