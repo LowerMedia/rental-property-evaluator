@@ -190,5 +190,23 @@ describe('fetchPropertyData', () => {
         message: expect.stringContaining('unexpected AVM value shape'),
       });
     });
+
+    it('throws RentCastError unknown when /properties returns a non-array body', async () => {
+      vi.spyOn(globalThis, 'fetch').mockImplementation((url) => {
+        const u = String(url);
+        if (u.includes('/avm/value')) {
+          return Promise.resolve(new Response(JSON.stringify(AVM_VALUE_RESPONSE), { status: 200 }));
+        }
+        if (u.includes('/avm/rent')) {
+          return Promise.resolve(new Response(JSON.stringify(AVM_RENT_RESPONSE), { status: 200 }));
+        }
+        // /properties returns a plain object instead of an array
+        return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
+      });
+      await expect(fetchPropertyData('123 Main St', 'key')).rejects.toMatchObject({
+        code: 'unknown',
+        message: expect.stringContaining('unexpected /properties response shape'),
+      });
+    });
   });
 });

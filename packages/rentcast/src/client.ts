@@ -77,6 +77,9 @@ export async function fetchPropertyData(
     // 404 → fall through with nulls
   } else {
     // /properties returns an array; we requested limit=1
+    if (!Array.isArray(props.value)) {
+      throw new RentCastError('unknown', 'RentCast: unexpected /properties response shape');
+    }
     const list = props.value as Array<{
       squareFootage?: number;
       units?: number;
