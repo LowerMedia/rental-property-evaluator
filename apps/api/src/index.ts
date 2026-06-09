@@ -43,8 +43,9 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { evaluate } from '@rpe/engine';
 import type { DealInputs, EvalOptions } from '@rpe/engine';
-import { handleProperty } from './routes/property.js';
+import { handleProperty, type PropertyDeps, type PropertySuccessBody } from './routes/property.js';
 import { handleRegion } from './routes/region.js';
+import { RateLimiter, TtlCache } from './services/guardrails.js';
 
 // Hoist __filename/__dirname for use in VERSION and the entry-point guard below.
 const __filename = fileURLToPath(import.meta.url);
@@ -332,7 +333,38 @@ async function handleEvaluate(req: IncomingMessage, res: ServerResponse): Promis
 
 // ── App factory ────────────────────────────────────────────────────────────────
 
-export function createApp() {
+/**
+ * /property cost-guardrail config (RPE-45). Env defaults:
+ *   RPE_PROPERTY_CACHE_TTL_MS — success-response cache TTL, default 24 h, 0 disables
+ *   RPE_PROPERTY_RPM          — per-IP requests/minute reaching the provider, default 30
+ *   RPE_PROPERTY_DAILY_CAP    — per-IP daily provider-call cap, default 300
+ */
+export interface AppConfig {
+  property?: {
+    cacheTtlMs?: number;
+    rpm?: number;
+    dailyCap?: number;
+  };
+}
+
+function envInt(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === '') return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
+export function createApp(config: AppConfig = {}) {
+  const propertyDeps: PropertyDeps = {
+    cache: new TtlCache<PropertySuccessBody>(
+      config.property?.cacheTtlMs ?? envInt('RPE_PROPERTY_CACHE_TTL_MS', 24 * 60 * 60 * 1000),
+    ),
+    limiter: new RateLimiter(
+      config.property?.rpm ?? envInt('RPE_PROPERTY_RPM', 30),
+      config.property?.dailyCap ?? envInt('RPE_PROPERTY_DAILY_CAP', 300),
+    ),
+  };
+
   return createServer((req: IncomingMessage, res: ServerResponse) => {
     const url = req.url?.split('?')[0] ?? '/';
 
@@ -354,7 +386,7 @@ export function createApp() {
       url === '/evaluate' || url === '/evaluate/'
         ? () => handleEvaluate(req, res)
         : url === '/property' || url === '/property/'
-        ? () => handleProperty(req, res, json, readBody)
+        ? () => handleProperty(req, res, json, readBody, propertyDeps)
         : url === '/region' || url === '/region/'
         ? () => handleRegion(req, res, json)
         : () => {
