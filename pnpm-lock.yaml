@@ -74,6 +74,9 @@ importers:
       '@rpe/engine':
         specifier: workspace:*
         version: link:../../packages/engine
+      '@rpe/property':
+        specifier: workspace:*
+        version: link:../../packages/property
       '@rpe/region-defaults':
         specifier: workspace:*
         version: link:../../packages/region-defaults
