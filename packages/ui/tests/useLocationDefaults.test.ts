@@ -144,6 +144,78 @@ describe('useLocationDefaults', () => {
     expect(result.current.resolving).toBe(false);
   });
 
+  it('clears prior resolved values immediately on zip→zip change and refetches', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(makeMockRegionResponse()),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(makeMockRegionResponse({
+          stateCode: 'CA',
+          label: 'Los Angeles, CA (90001)',
+          propertyTaxRate: 0.0075,
+          sourceLabel: 'CA state averages (Census ACS / NAIC 2022)',
+        })),
+      } as unknown as Response);
+
+    const { result, rerender } = renderHook(
+      ({ zip }) => useLocationDefaults(zip, API_URL),
+      { initialProps: { zip: '78701' } },
+    );
+
+    await waitFor(() => expect(result.current.stateCode).toBe('TX'));
+
+    act(() => { rerender({ zip: '90001' }); });
+
+    // Stale TX values must be cleared synchronously — never leak the previous
+    // location's stateCode/label/rates while the new fetch is in flight
+    expect(result.current.stateCode).toBe('');
+    expect(result.current.label).toBe('');
+    expect(result.current.rates).toBeNull();
+    expect(result.current.resolving).toBe(true);
+
+    await waitFor(() => expect(result.current.stateCode).toBe('CA'));
+    expect(result.current.label).toBe('Los Angeles, CA (90001)');
+    expect(result.current.rates?.propertyTaxRate).toBeCloseTo(0.0075, 4);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(fetchSpy).toHaveBeenLastCalledWith(
+      `${API_URL}/region?zip=90001`,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it('fully resets stateCode and label (not just rates) on fetch error', async () => {
+    // First resolve successfully, then fail on a new zip — no stale TX metadata may survive
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(makeMockRegionResponse()),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: () => Promise.resolve({ error: 'boom' }),
+      } as unknown as Response);
+
+    const { result, rerender } = renderHook(
+      ({ zip }) => useLocationDefaults(zip, API_URL),
+      { initialProps: { zip: '78701' } },
+    );
+    await waitFor(() => expect(result.current.stateCode).toBe('TX'));
+
+    act(() => { rerender({ zip: '90001' }); });
+    await waitFor(() => expect(result.current.resolving).toBe(false));
+
+    expect(result.current.rates).toBeNull();
+    expect(result.current.stateCode).toBe('');
+    expect(result.current.label).toBe('');
+  });
+
   it('degrades gracefully on HTTP error response', async () => {
     mockFetchError(404);
     const { result } = renderHook(() =>
