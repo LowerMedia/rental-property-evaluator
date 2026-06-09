@@ -18,6 +18,13 @@ import { SIMPLE_RESULT_KEYS, type UiMode } from './state/uiMode';
 import { applySimpleBaselines } from './state/simpleBaselines';
 import { ConnectorSettingsModal } from './components/ConnectorSettingsModal';
 import { getRentCastKey } from './state/connectorStorage';
+import {
+  type LocationState,
+  DEFAULT_LOCATION,
+  loadLocation,
+  saveLocation,
+  clearLocationStorage,
+} from './state/locationState';
 
 // ─── Metric helpers ───────────────────────────────────────────────────────────
 
@@ -460,6 +467,24 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
     setApiKey(getRentCastKey());
   }, []);
 
+  /**
+   * Location state for regional assumption defaults (RPE-64).
+   * zip='' means no location set. stateCode/label are populated after API resolution.
+   * Persisted to localStorage under locationState's STORAGE_KEY.
+   */
+  const [location, setLocation] = useState<LocationState>(() => loadLocation());
+
+  const handleZipChange = useCallback((zip: string) => {
+    const pending: LocationState = { zip, stateCode: '', label: '' };
+    setLocation(pending);
+    saveLocation(pending);
+  }, []);
+
+  const handleLocationClear = useCallback(() => {
+    setLocation(DEFAULT_LOCATION);
+    clearLocationStorage();
+  }, []);
+
   /** Seed pro-forma defaults into state the first time the user enters pro-forma mode. */
   const handleSetProFormaMode = useCallback((pf: boolean) => {
     setProFormaMode(pf);
@@ -641,6 +666,10 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
               uiMode={uiMode}
               apiKey={apiKey}
               apiUrl={apiUrl}
+              location={location}
+              locationResolving={false}
+              onZipChange={handleZipChange}
+              onLocationClear={handleLocationClear}
             />
           </div>
         </aside>

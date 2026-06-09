@@ -9,6 +9,8 @@ import { NumberInput } from './NumberInput';
 import { ToggleInput } from './ToggleInput';
 import { FixedExpenseRow } from './FixedExpenseRow';
 import { AutofillBar } from '../AutofillBar';
+import { LocationInput } from '../LocationInput';
+import type { LocationState } from '../../state/locationState';
 
 export interface DealInputsFormProps {
   state: DealInputs;
@@ -29,6 +31,18 @@ export interface DealInputsFormProps {
   apiKey?: string | null;
   /** Base URL for apps/api. Defaults to http://localhost:3001. */
   apiUrl?: string;
+  /**
+   * Current location state for regional assumption defaults (RPE-64).
+   * LocationInput renders below AutofillBar when both onZipChange and
+   * onLocationClear are provided; this prop supplies its display values.
+   */
+  location?: LocationState;
+  /** True while useLocationDefaults is resolving the ZIP → region. */
+  locationResolving?: boolean;
+  /** Called with a valid ZIP5 when the user submits the location input. */
+  onZipChange?: (zip: string) => void;
+  /** Called when the user clears the location chip. */
+  onLocationClear?: () => void;
 }
 
 /**
@@ -47,6 +61,10 @@ export function DealInputsForm({
   uiMode = 'complex',
   apiKey = null,
   apiUrl,
+  location,
+  locationResolving = false,
+  onZipChange,
+  onLocationClear,
 }: DealInputsFormProps) {
   const { expenses } = state;
   const simple = uiMode === 'simple';
@@ -73,6 +91,18 @@ export function DealInputsForm({
     <div>
       {/* ── Autofill bar (always shown, adapts when apiKey is null) ──────── */}
       <AutofillBar dispatch={dispatch} apiKey={apiKey} apiUrl={apiUrl} currentValues={currentAutofillValues} />
+
+      {/* ── Location input for regional assumption defaults (RPE-64) ─────── */}
+      {onZipChange && onLocationClear && (
+        <LocationInput
+          zip={location?.zip ?? ''}
+          stateCode={location?.stateCode ?? ''}
+          label={location?.label ?? ''}
+          resolving={locationResolving}
+          onZipChange={onZipChange}
+          onClear={onLocationClear}
+        />
+      )}
 
       {/* ── Acquisition ──────────────────────────────────────────────────── */}
       <InputSection title="Acquisition">
