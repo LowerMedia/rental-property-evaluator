@@ -346,6 +346,12 @@ export interface AppConfig {
     rpm?: number;
     dailyCap?: number;
   };
+  /** /geocode guardrails (RPE-46). Env: RPE_GEOCODE_RPM (default 60),
+   * RPE_GEOCODE_DAILY_CAP (default 1000); cache shares the property TTL knob. */
+  geocode?: {
+    rpm?: number;
+    dailyCap?: number;
+  };
 }
 
 function envInt(name: string, fallback: number): number {
@@ -371,6 +377,10 @@ export function createApp(config: AppConfig = {}) {
   const geocodeDeps: GeocodeDeps = {
     cache: new TtlCache<GeocodeSuccessBody>(
       config.property?.cacheTtlMs ?? envInt('RPE_PROPERTY_CACHE_TTL_MS', 24 * 60 * 60 * 1000),
+    ),
+    limiter: new RateLimiter(
+      config.geocode?.rpm ?? envInt('RPE_GEOCODE_RPM', 60),
+      config.geocode?.dailyCap ?? envInt('RPE_GEOCODE_DAILY_CAP', 1000),
     ),
   };
 
