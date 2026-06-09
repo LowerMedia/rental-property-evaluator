@@ -131,14 +131,14 @@ describe('POST /property', () => {
     expect(res.status).toBe(404);
   });
 
-  it('returns 402 when fetchPropertyData throws rate_limit', async () => {
+  it('returns 429 when fetchPropertyData throws rate_limit', async () => {
     mockFetch.mockRejectedValue(new RentCastError('rate_limit', 'rate limit'));
     const res = await fetch(`${base}/property`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(VALID_BODY),
     });
-    expect(res.status).toBe(402);
+    expect(res.status).toBe(429);
   });
 
   it('returns 502 when fetchPropertyData throws unknown RentCast error', async () => {

@@ -70,7 +70,7 @@ export async function handleProperty(
       const statusMap: Record<RentCastErrorCode, number> = {
         bad_key:    401,
         not_found:  404,
-        rate_limit: 402,
+        rate_limit: 429,
         unknown:    502,
       };
       const status = statusMap[err.code];
