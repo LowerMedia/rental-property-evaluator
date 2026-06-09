@@ -3,8 +3,9 @@
  *
  * Key: 'rpe:connectors:rentcast'
  *
- * The key belongs to the user and is only read when the user explicitly
- * triggers an autofill lookup.
+ * The key is read on Evaluator mount, on Settings modal close, and when the
+ * user triggers an autofill lookup. It is never transmitted to any server
+ * except the user's own API calls to RentCast.
  */
 
 const STORAGE_KEY = 'rpe:connectors:rentcast';

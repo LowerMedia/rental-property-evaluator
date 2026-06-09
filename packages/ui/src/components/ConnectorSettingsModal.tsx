@@ -49,7 +49,7 @@ export function ConnectorSettingsModal({ onClose }: ConnectorSettingsModalProps)
 
   // Mask key: show last 4 chars, mask the rest (prefix-agnostic)
   const maskedKey = storedKey
-    ? `${'•'.repeat(Math.max(4, storedKey.length - 4))}${storedKey.slice(-4)}`
+    ? `${'•'.repeat(Math.max(0, storedKey.length - 4))}${storedKey.slice(-4)}`
     : null;
 
   return (
@@ -70,6 +70,7 @@ export function ConnectorSettingsModal({ onClose }: ConnectorSettingsModalProps)
             onClick={onClose}
             className="text-lo hover:text-hi transition-colors"
             aria-label="Close settings"
+            autoFocus={storedKey !== null && !isEditing}
           >
             ✕
           </button>
@@ -116,6 +117,10 @@ export function ConnectorSettingsModal({ onClose }: ConnectorSettingsModalProps)
                     focus:border-accent focus:outline-none
                   "
                   autoFocus
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   aria-label="RentCast API key"
                 />
                 <button
@@ -133,7 +138,7 @@ export function ConnectorSettingsModal({ onClose }: ConnectorSettingsModalProps)
               </div>
             ) : (
               <div className="flex gap-2 items-center">
-                <code className="flex-1 rounded border border-border bg-base px-3 py-1.5 text-xs text-lo font-mono">
+                <code className="flex-1 rounded border border-border bg-base px-3 py-1.5 text-xs text-lo font-mono overflow-hidden break-all">
                   {maskedKey}
                 </code>
                 <button

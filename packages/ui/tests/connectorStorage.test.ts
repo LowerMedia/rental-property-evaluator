@@ -55,6 +55,5 @@ describe('connectorStorage', () => {
     const broken = { ...localStorage, getItem: () => { throw new Error('denied'); } };
     vi.stubGlobal('localStorage', broken);
     expect(getRentCastKey()).toBeNull();
-    vi.unstubAllGlobals();
   });
 });
