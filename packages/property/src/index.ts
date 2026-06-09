@@ -27,3 +27,6 @@ export {
   ProviderError,
   type RentCastProxyOptions,
 } from './providers/rentcastProxy';
+
+export { parseListingText } from './pasteText';
+export { createPasteTextProvider } from './providers/pasteTextProvider';
