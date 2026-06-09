@@ -19,6 +19,12 @@ async function rcGet(path: string, apiKey: string): Promise<unknown> {
   return res.json() as Promise<unknown>;
 }
 
+function ensureRentCastError(reason: unknown): RentCastError {
+  if (reason instanceof RentCastError) return reason;
+  const msg = reason instanceof Error ? reason.message : String(reason);
+  return new RentCastError('unknown', `Network error: ${msg}`);
+}
+
 /**
  * Fetch property data from RentCast for the given address.
  *
@@ -47,8 +53,8 @@ export async function fetchPropertyData(
   ]);
 
   // AVM failures are fatal
-  if (avm.status === 'rejected') throw avm.reason as RentCastError;
-  if (rent.status === 'rejected') throw rent.reason as RentCastError;
+  if (avm.status === 'rejected') throw ensureRentCastError(avm.reason);
+  if (rent.status === 'rejected') throw ensureRentCastError(rent.reason);
 
   const avmData  = avm.value  as { price: number };
   const rentData = rent.value as { rent: number };
