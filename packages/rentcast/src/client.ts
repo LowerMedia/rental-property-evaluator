@@ -22,7 +22,7 @@ async function rcGet(path: string, apiKey: string): Promise<unknown> {
 function ensureRentCastError(reason: unknown): RentCastError {
   if (reason instanceof RentCastError) return reason;
   const msg = reason instanceof Error ? reason.message : String(reason);
-  return new RentCastError('unknown', `Network error: ${msg}`);
+  return new RentCastError('unknown', `RentCast fetch failed: ${msg}`);
 }
 
 /**
@@ -91,7 +91,7 @@ export async function fetchPropertyData(
         const years      = Object.keys(p.propertyTaxes).sort().reverse();
         const latestYear = years[0];
         const latestTax  = latestYear ? p.propertyTaxes[latestYear] : undefined;
-        annualTaxes      = latestTax?.total ?? null;
+        annualTaxes      = latestTax && typeof latestTax.total === 'number' ? latestTax.total : null;
       }
     }
   }

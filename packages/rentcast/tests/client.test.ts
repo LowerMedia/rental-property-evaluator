@@ -173,5 +173,22 @@ describe('fetchPropertyData', () => {
         (e: unknown) => e instanceof RentCastError && e.code === 'unknown',
       );
     });
+
+    it('throws RentCastError unknown when AVM value response has unexpected shape', async () => {
+      vi.spyOn(globalThis, 'fetch').mockImplementation((url) => {
+        const u = String(url);
+        if (u.includes('/avm/value')) {
+          return Promise.resolve(new Response(JSON.stringify({ notPrice: 999 }), { status: 200 }));
+        }
+        if (u.includes('/avm/rent')) {
+          return Promise.resolve(new Response(JSON.stringify({ rent: 2000 }), { status: 200 }));
+        }
+        return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }));
+      });
+      await expect(fetchPropertyData('123 Main St', 'key')).rejects.toMatchObject({
+        code: 'unknown',
+        message: expect.stringContaining('unexpected AVM value shape'),
+      });
+    });
   });
 });
