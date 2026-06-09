@@ -450,6 +450,10 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
   const [showSettings, setShowSettings] = useState(false);
   const [apiKey, setApiKey] = useState<string | null>(() => getRentCastKey());
 
+  const apiUrl =
+    (import.meta as { env?: { VITE_API_URL?: string } }).env?.['VITE_API_URL'] ??
+    'http://localhost:3001';
+
   // Refresh apiKey after the modal closes (user may have saved or removed)
   const handleCloseSettings = useCallback(() => {
     setShowSettings(false);
@@ -636,6 +640,7 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
               proFormaMode={proFormaMode}
               uiMode={uiMode}
               apiKey={apiKey}
+              apiUrl={apiUrl}
             />
           </div>
         </aside>

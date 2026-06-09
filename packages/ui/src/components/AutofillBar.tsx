@@ -7,6 +7,7 @@ import type { DealAction } from '../state/dealReducer';
 interface AutofillBarProps {
   dispatch: Dispatch<DealAction>;
   apiKey: string | null;
+  apiUrl?: string;
 }
 
 /**
@@ -16,9 +17,9 @@ interface AutofillBarProps {
  * When apiKey is null (user hasn't connected RentCast), shows a prompt
  * directing them to ⚙ Settings instead of the input.
  */
-export function AutofillBar({ dispatch, apiKey }: AutofillBarProps) {
+export function AutofillBar({ dispatch, apiKey, apiUrl }: AutofillBarProps) {
   const [address, setAddress] = useState('');
-  const { status, previewData, errorMessage, trigger, apply, dismiss } = useAutofill({ dispatch, apiKey });
+  const { status, previewData, errorMessage, trigger, apply, dismiss } = useAutofill({ dispatch, apiKey, apiUrl });
 
   if (!apiKey) {
     return (
@@ -83,7 +84,7 @@ export function AutofillBar({ dispatch, apiKey }: AutofillBarProps) {
         <AutofillPreviewPopover
           data={previewData}
           onApply={() => { apply(); setAddress(''); }}
-          onDismiss={dismiss}
+          onDismiss={() => { dismiss(); setAddress(''); }}
         />
       )}
     </div>

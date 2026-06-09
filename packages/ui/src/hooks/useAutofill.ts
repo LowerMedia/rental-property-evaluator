@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import type { Dispatch } from 'react';
 import type { DealAction } from '../state/dealReducer';
 
-interface PropertyData {
+export interface PropertyData {
   purchasePrice: number;
   grossRent: number;
   sqft: number | null;
