@@ -493,6 +493,7 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
   const {
     rates: locationRates,
     resolving: locationResolving,
+    failed: locationLookupFailed,
     stateCode: resolvedStateCode,
     label: resolvedLabel,
   } = useLocationDefaults(location.zip, apiUrl);
@@ -707,6 +708,7 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
               apiUrl={apiUrl}
               location={location}
               locationResolving={locationResolving}
+              locationLookupFailed={locationLookupFailed}
               locationSourceLabel={locationRates?.sourceLabel}
               onZipChange={handleZipChange}
               onLocationClear={handleLocationClear}

@@ -10,6 +10,8 @@ export interface LocationInputProps {
   label: string;
   /** True while useLocationDefaults is fetching the region. */
   resolving?: boolean;
+  /** True when the last region lookup failed — shows an error hint instead of "pending". */
+  lookupFailed?: boolean;
   /** Data-source attribution shown below the resolved chip (e.g. 'TX state averages (Census ACS / NAIC 2022)'). */
   sourceLabel?: string;
   /** Called with a valid ZIP5 when the user submits. */
@@ -34,6 +36,7 @@ export function LocationInput({
   stateCode,
   label,
   resolving = false,
+  lookupFailed = false,
   sourceLabel,
   onZipChange,
   onClear,
@@ -139,8 +142,12 @@ export function LocationInput({
       </div>
       {zip !== '' && stateCode === '' && (
         <div className="flex items-center gap-2">
-          <p className="text-xs text-yellow-400/80">
-            {resolving ? `Resolving ${zip}…` : `${zip} pending`}
+          <p className={`text-xs ${lookupFailed ? 'text-red-400' : 'text-yellow-400/80'}`} role={lookupFailed ? 'alert' : undefined}>
+            {resolving
+              ? `Resolving ${zip}…`
+              : lookupFailed
+                ? `Couldn't look up ${zip} — using national defaults. Clear and retry.`
+                : `${zip} pending`}
           </p>
           <button
             type="button"
