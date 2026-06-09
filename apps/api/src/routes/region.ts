@@ -21,7 +21,8 @@
  *       threeBed:  number | null,
  *       fourBed:   number | null,
  *     } | null,
- *     resolvedLevel: 'zip' | 'state' | 'national',
+ *     resolvedLevel: 'state' | 'national',  // granularity of the *rates* above —
+ *                                 // rent (when present) is always ZIP-level from HUD SAFMR
  *     sourceLabel:   string,
  *   }
  *

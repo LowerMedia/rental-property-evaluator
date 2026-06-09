@@ -31,9 +31,9 @@ When a user enters a location (ZIP code), the deal's hidden baseline assumptions
 |---|---|---|---|
 | Property tax rate | Census ACS state effective rates (pre-computed, baked in) | State | Static JSON in packages/region-defaults |
 | Insurance rate | NAIC 2022 state premium ÷ $254k nat'l median home value | State | Static JSON in packages/region-defaults |
-| Vacancy | National 5% for v1 (county ACS deferred) | National | Static fallback |
+| Vacancy | National 6.8% for v1 (county ACS deferred) | National | Static fallback |
 | Rent estimate | HUD SAFMR (via apps/api proxy) | ZIP/ZCTA | Live API call, 30-day localStorage cache |
-| Appreciation | National 3% for v1 (FHFA HPI data deferred) | National | Static fallback |
+| Appreciation | National 4.0% for v1 (FHFA HPI data deferred) | National | Static fallback |
 | Rent growth | National 3.5% for v1 (Zillow ZORI deferred) | National | Static fallback |
 
 **Key design:** `packages/region-defaults` exports `resolveRegionalRates(stateCode)` returning multipliers that `simpleBaselines.ts` uses instead of hard-coded constants. The `apps/api /region?zip=XXXXX` endpoint calls HUD SAFMR (proxy, free API token) to get ZIP-level rent + state code, then merges with static data.
