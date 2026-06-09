@@ -13,7 +13,9 @@ const STORAGE_KEY = 'rpe:connectors:rentcast';
 export function getRentCastKey(): string | null {
   try {
     const value = localStorage.getItem(STORAGE_KEY);
-    return value !== null && value.trim() !== '' ? value : null;
+    if (value === null) return null;
+    const trimmed = value.trim();
+    return trimmed !== '' ? trimmed : null;
   } catch {
     // localStorage unavailable (private browsing, SSR, etc.)
     return null;
