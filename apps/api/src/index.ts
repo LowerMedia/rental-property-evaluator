@@ -43,6 +43,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { evaluate } from '@rpe/engine';
 import type { DealInputs, EvalOptions } from '@rpe/engine';
+import { handleGeocode, type GeocodeDeps, type GeocodeSuccessBody } from './routes/geocode.js';
 import { handleProperty, type PropertyDeps, type PropertySuccessBody } from './routes/property.js';
 import { handleRegion } from './routes/region.js';
 import { RateLimiter, TtlCache } from './services/guardrails.js';
@@ -365,6 +366,14 @@ export function createApp(config: AppConfig = {}) {
     ),
   };
 
+  // Address geometry does not move — geocode answers cache on the same
+  // TTL knob as property lookups (RPE-46)
+  const geocodeDeps: GeocodeDeps = {
+    cache: new TtlCache<GeocodeSuccessBody>(
+      config.property?.cacheTtlMs ?? envInt('RPE_PROPERTY_CACHE_TTL_MS', 24 * 60 * 60 * 1000),
+    ),
+  };
+
   return createServer((req: IncomingMessage, res: ServerResponse) => {
     const url = req.url?.split('?')[0] ?? '/';
 
@@ -389,6 +398,8 @@ export function createApp(config: AppConfig = {}) {
         ? () => handleProperty(req, res, json, readBody, propertyDeps)
         : url === '/region' || url === '/region/'
         ? () => handleRegion(req, res, json)
+        : url === '/geocode' || url === '/geocode/'
+        ? () => handleGeocode(req, res, json, geocodeDeps)
         : () => {
             json(res, 404, { error: `Unknown endpoint: ${url}` });
             return Promise.resolve();
@@ -415,6 +426,7 @@ if (resolve(process.argv[1] ?? '') === __filename) {
     console.log('  POST /evaluate');
     console.log('  POST /property');
     console.log('  GET  /region?zip=XXXXX');
+    console.log('  GET  /geocode?q=<address>');
   });
   server.on('error', (err) => {
     console.error('Server error:', err);
