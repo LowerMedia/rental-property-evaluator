@@ -1,6 +1,19 @@
-import { useEffect } from 'react';
+/**
+ * E7 — import review/override panel (RPE-53; evolved from the RPE-43d preview)
+ *
+ * Lists every patch the tiered import produced with its source badge,
+ * confidence chip, and an accept checkbox. Selection defaults encode the
+ * never-silently-overwrite contract:
+ *   - needs-review (low confidence) rows start UNCHECKED
+ *   - rows that would overwrite a non-empty, differing current value
+ *     start UNCHECKED (explicit confirm)
+ *   - everything else starts checked
+ */
+
+import { useEffect, useMemo, useState } from 'react';
+import type { DealInputPatch, DealPatchTarget, MappedLookup } from '@rpe/property';
 import { fmtCurrency } from '../utils/format';
-import type { PropertyData } from '../hooks/useAutofill';
+import { DEFAULT_INPUTS } from '../state/defaultInputs';
 
 export interface CurrentFormValues {
   purchasePrice?: number | null;
@@ -8,27 +21,75 @@ export interface CurrentFormValues {
   sqft?: number | null;
   units?: number | null;
   annualTaxes?: number | null;
+  annualInsurance?: number | null;
 }
 
 interface AutofillPreviewPopoverProps {
-  data: PropertyData;
-  onApply: () => void;
+  patches: DealInputPatch[];
+  meta: MappedLookup['meta'];
+  onApply: (selected: ReadonlySet<DealPatchTarget>) => void;
   onDismiss: () => void;
   currentValues?: CurrentFormValues;
 }
 
-interface DiffRow {
-  label: string;
-  currentValue: string;
-  value: string;
+const TARGET_LABELS: Record<DealPatchTarget, string> = {
+  purchasePrice: 'Purchase Price',
+  grossRent: 'Gross Rent (mo)',
+  sqft: 'Square Footage',
+  units: 'Units',
+  'expenses.taxes': 'Property Taxes (yr)',
+  'expenses.insurance': 'Insurance (yr)',
+};
+
+const SOURCE_LABELS: Record<string, string> = {
+  rentcast: 'RentCast',
+  scrape: 'Scraped — unverified',
+  paste: 'Pasted text',
+};
+
+function currentFor(target: DealPatchTarget, cur: CurrentFormValues): number | null | undefined {
+  switch (target) {
+    case 'purchasePrice': return cur.purchasePrice;
+    case 'grossRent': return cur.grossRent;
+    case 'sqft': return cur.sqft;
+    case 'units': return cur.units;
+    case 'expenses.taxes': return cur.annualTaxes;
+    case 'expenses.insurance': return cur.annualInsurance;
+  }
 }
 
-/**
- * Shows incoming RentCast values alongside current form values.
- * All non-null RentCast fields are listed (not filtered to changed-only).
- * Dismiss on Escape or Cancel; apply on Apply.
- */
-export function AutofillPreviewPopover({ data, onApply, onDismiss, currentValues }: AutofillPreviewPopoverProps) {
+/** App default for a target — a current value still at its default was
+ * never edited by the user, so importing over it is not an overwrite. */
+function defaultFor(target: DealPatchTarget): number | undefined {
+  switch (target) {
+    case 'purchasePrice': return DEFAULT_INPUTS.purchasePrice;
+    case 'grossRent': return DEFAULT_INPUTS.grossRent;
+    case 'sqft': return DEFAULT_INPUTS.sqft;
+    case 'units': return DEFAULT_INPUTS.units;
+    case 'expenses.taxes': return DEFAULT_INPUTS.expenses.taxes.amount;
+    case 'expenses.insurance': return DEFAULT_INPUTS.expenses.insurance?.amount;
+  }
+}
+
+function fmtValue(target: DealPatchTarget, amount: number): string {
+  if (target === 'sqft') return `${amount.toLocaleString()} sqft`;
+  if (target === 'units') return String(amount);
+  return fmtCurrency(amount);
+}
+
+function confidenceClasses(confidence: DealInputPatch['confidence']): string {
+  if (confidence === 'high') return 'text-green-400 border-green-400/40';
+  if (confidence === 'medium') return 'text-amber-300 border-amber-300/40';
+  return 'text-red-400 border-red-400/40';
+}
+
+export function AutofillPreviewPopover({
+  patches,
+  meta,
+  onApply,
+  onDismiss,
+  currentValues,
+}: AutofillPreviewPopoverProps) {
   // Dismiss on Escape
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -38,49 +99,100 @@ export function AutofillPreviewPopover({ data, onApply, onDismiss, currentValues
     return () => window.removeEventListener('keydown', handler);
   }, [onDismiss]);
 
-  const cur = currentValues ?? {};
-  const fmtCurrent = (v: number | null | undefined, fmt: (n: number) => string) =>
-    v != null ? fmt(v) : '—';
+  const cur = useMemo(() => currentValues ?? {}, [currentValues]);
 
-  const rows: DiffRow[] = [
-    { label: 'Purchase Price',    currentValue: fmtCurrent(cur.purchasePrice, fmtCurrency),     value: fmtCurrency(data.purchasePrice) },
-    { label: 'Gross Rent (mo)',   currentValue: fmtCurrent(cur.grossRent, fmtCurrency),         value: fmtCurrency(data.grossRent) },
-    ...(data.annualTaxes !== null
-      ? [{ label: 'Property Taxes (yr)', currentValue: fmtCurrent(cur.annualTaxes, fmtCurrency), value: fmtCurrency(data.annualTaxes) }]
-      : []),
-    ...(data.sqft !== null
-      ? [{ label: 'Square Footage', currentValue: fmtCurrent(cur.sqft, n => `${n.toLocaleString()} sqft`), value: `${data.sqft.toLocaleString()} sqft` }]
-      : []),
-    ...(data.units !== null
-      ? [{ label: 'Units', currentValue: fmtCurrent(cur.units, String), value: String(data.units) }]
-      : []),
-  ];
+  const defaultSelection = useMemo(() => {
+    const selected = new Set<DealPatchTarget>();
+    for (const patch of patches) {
+      if (patch.needsReview) continue; // low confidence — explicit opt-in
+      const existing = currentFor(patch.target, cur);
+      const userEdited =
+        existing != null && existing !== 0 &&
+        existing !== defaultFor(patch.target) && // untouched defaults are not edits
+        patch.value.amount !== existing;
+      if (userEdited) continue; // user typed a value here — confirm, never silent
+      selected.add(patch.target);
+    }
+    return selected;
+  }, [patches, cur]);
+
+  const [selected, setSelected] = useState<Set<DealPatchTarget>>(defaultSelection);
+
+  // A new import while the panel is open replaces the patches — re-derive
+  // the selection defaults rather than carrying stale choices over
+  useEffect(() => {
+    setSelected(defaultSelection);
+  }, [defaultSelection]);
+
+  const toggle = (target: DealPatchTarget) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(target)) next.delete(target);
+      else next.add(target);
+      return next;
+    });
+  };
+
+  const metaBits = [
+    meta.bedrooms !== undefined ? `${meta.bedrooms.value} bd` : null,
+    meta.bathrooms !== undefined ? `${meta.bathrooms.value} ba` : null,
+    meta.yearBuilt !== undefined ? `built ${meta.yearBuilt.value}` : null,
+  ].filter((b): b is string => b !== null);
 
   return (
     <div
       className="rounded border border-accent/50 bg-raised shadow-lg overflow-hidden"
       role="dialog"
-      aria-label="Autofill preview"
+      aria-label="Import review"
     >
       {/* Header */}
       <div className="flex items-center justify-between bg-accent/10 px-4 py-2 border-b border-border">
-        <span className="text-xs font-medium text-accent">⚡ RentCast found this property</span>
+        <span className="text-xs font-medium text-accent">⚡ Review imported values</span>
+        {metaBits.length > 0 && (
+          <span className="text-xs text-mid">{metaBits.join(' · ')}</span>
+        )}
       </div>
 
-      {/* Diff rows */}
+      {/* Patch rows */}
       <div>
-        {rows.map((row, i) => (
-          <div
-            key={row.label}
-            className={`grid grid-cols-[1fr_auto_auto] gap-3 items-center px-4 py-2 text-xs ${
-              i % 2 === 1 ? 'bg-base' : ''
-            }`}
-          >
-            <span className="text-mid">{row.label}</span>
-            <span className="text-lo line-through">{row.currentValue}</span>
-            <span className="text-green-400 font-medium">{row.value}</span>
-          </div>
-        ))}
+        {patches.map((patch, i) => {
+          const existing = currentFor(patch.target, cur);
+          const isOn = selected.has(patch.target);
+          return (
+            <label
+              key={patch.target}
+              className={`grid grid-cols-[auto_1fr_auto_auto_auto] gap-3 items-center px-4 py-2 text-xs cursor-pointer ${
+                i % 2 === 1 ? 'bg-base' : ''
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={isOn}
+                onChange={() => toggle(patch.target)}
+                aria-label={`Apply ${TARGET_LABELS[patch.target]}`}
+                className="accent-current"
+              />
+              <span className="text-mid">
+                {TARGET_LABELS[patch.target]}
+                <span
+                  className={`ml-2 rounded border px-1 py-px text-[10px] uppercase tracking-wide ${confidenceClasses(patch.confidence)}`}
+                  title={`Confidence: ${patch.confidence}`}
+                >
+                  {patch.needsReview ? 'needs review' : patch.confidence}
+                </span>
+              </span>
+              <span className="text-lo text-[10px] uppercase tracking-wide" title={`Source: ${patch.source}`}>
+                {SOURCE_LABELS[patch.source] ?? patch.source}
+              </span>
+              <span className="text-lo line-through">
+                {existing != null && existing !== 0 ? fmtValue(patch.target, existing) : '—'}
+              </span>
+              <span className={isOn ? 'text-green-400 font-medium' : 'text-lo'}>
+                {fmtValue(patch.target, patch.value.amount)}
+              </span>
+            </label>
+          );
+        })}
       </div>
 
       {/* Actions */}
@@ -97,13 +209,15 @@ export function AutofillPreviewPopover({ data, onApply, onDismiss, currentValues
         </button>
         <button
           type="button"
-          onClick={onApply}
+          onClick={() => onApply(selected)}
+          disabled={selected.size === 0}
           className="
             rounded bg-accent px-3 py-1 text-xs font-medium text-base
             hover:opacity-90 transition-opacity
+            disabled:opacity-40 disabled:cursor-not-allowed
           "
         >
-          Apply →
+          Apply {selected.size > 0 ? `${selected.size} ` : ''}→
         </button>
       </div>
     </div>
