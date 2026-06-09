@@ -67,6 +67,8 @@ function mockFetchNetworkError() {
 describe('useLocationDefaults', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    // The hook caches successful lookups (RPE-72) — isolate every test
+    localStorage.clear();
   });
 
   it('starts with empty state when zip is empty and makes no fetch call', () => {
@@ -262,6 +264,60 @@ describe('useLocationDefaults', () => {
     expect(result.current.failed).toBe(false);
     expect(result.current.resolving).toBe(true);
 
+    await waitFor(() => expect(result.current.stateCode).toBe('TX'));
+    expect(result.current.failed).toBe(false);
+  });
+
+  it('serves a second lookup of the same zip from cache without fetching (RPE-72)', async () => {
+    mockFetchOk(makeMockRegionResponse());
+    const first = renderHook(() => useLocationDefaults('78701', API_URL));
+    await waitFor(() => expect(first.result.current.stateCode).toBe('TX'));
+    first.unmount();
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+
+    const second = renderHook(() => useLocationDefaults('78701', API_URL));
+    // Cache hit resolves synchronously — no loading flicker, no fetch
+    expect(second.result.current.resolving).toBe(false);
+    expect(second.result.current.stateCode).toBe('TX');
+    expect(second.result.current.rates?.propertyTaxRate).toBeCloseTo(0.018, 3);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('refetches when the cached entry is expired (RPE-72)', async () => {
+    mockFetchOk(makeMockRegionResponse());
+    const first = renderHook(() => useLocationDefaults('78701', API_URL));
+    await waitFor(() => expect(first.result.current.stateCode).toBe('TX'));
+    first.unmount();
+
+    // Age the entry past the 30-day TTL
+    const key = 'rpe_region_78701';
+    const envelope = JSON.parse(localStorage.getItem(key)!);
+    envelope.ts = Date.now() - 31 * 24 * 60 * 60 * 1000;
+    localStorage.setItem(key, JSON.stringify(envelope));
+
+    const second = renderHook(() => useLocationDefaults('78701', API_URL));
+    expect(second.result.current.resolving).toBe(true);
+    await waitFor(() => expect(second.result.current.stateCode).toBe('TX'));
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not cache failed lookups (RPE-72)', async () => {
+    mockFetchError(500);
+    const first = renderHook(() => useLocationDefaults('78701', API_URL));
+    await waitFor(() => expect(first.result.current.failed).toBe(true));
+    first.unmount();
+    expect(localStorage.getItem('rpe_region_78701')).toBeNull();
+  });
+
+  it('falls back to fetch when localStorage throws (RPE-72)', async () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('SecurityError');
+    });
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('SecurityError');
+    });
+    mockFetchOk(makeMockRegionResponse());
+    const { result } = renderHook(() => useLocationDefaults('78701', API_URL));
     await waitFor(() => expect(result.current.stateCode).toBe('TX'));
     expect(result.current.failed).toBe(false);
   });
