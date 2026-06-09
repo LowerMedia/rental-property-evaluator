@@ -74,6 +74,12 @@ importers:
       '@rpe/engine':
         specifier: workspace:*
         version: link:../../packages/engine
+      '@rpe/region-defaults':
+        specifier: workspace:*
+        version: link:../../packages/region-defaults
+      '@rpe/rentcast':
+        specifier: workspace:*
+        version: link:../../packages/rentcast
     devDependencies:
       '@types/node':
         specifier: ^20.0.0
@@ -157,6 +163,12 @@ importers:
         version: 6.4.2(@types/node@20.19.42)(jiti@2.7.0)(lightningcss@1.32.0)
 
   packages/engine:
+    devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
+  packages/region-defaults:
     devDependencies:
       typescript:
         specifier: 'catalog:'
