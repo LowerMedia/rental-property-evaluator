@@ -1,13 +1,6 @@
 import { useEffect } from 'react';
 import { fmtCurrency } from '../utils/format';
-
-interface PropertyData {
-  purchasePrice: number;
-  grossRent: number;
-  sqft: number | null;
-  units: number | null;
-  annualTaxes: number | null;
-}
+import type { PropertyData } from '../hooks/useAutofill';
 
 interface AutofillPreviewPopoverProps {
   data: PropertyData;

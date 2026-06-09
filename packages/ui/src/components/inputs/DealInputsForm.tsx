@@ -27,6 +27,8 @@ export interface DealInputsFormProps {
   uiMode?: UiMode;
   /** RentCast API key from connectorStorage. Passed to AutofillBar (wired in RPE-43d). */
   apiKey?: string | null;
+  /** Base URL for apps/api. Defaults to http://localhost:3001. */
+  apiUrl?: string;
 }
 
 /**
@@ -44,6 +46,7 @@ export function DealInputsForm({
   proFormaMode = false,
   uiMode = 'complex',
   apiKey = null,
+  apiUrl,
 }: DealInputsFormProps) {
   const { expenses } = state;
   const simple = uiMode === 'simple';
@@ -57,7 +60,7 @@ export function DealInputsForm({
   return (
     <div>
       {/* ── Autofill bar (always shown, adapts when apiKey is null) ──────── */}
-      <AutofillBar dispatch={dispatch} apiKey={apiKey} />
+      <AutofillBar dispatch={dispatch} apiKey={apiKey} apiUrl={apiUrl} />
 
       {/* ── Acquisition ──────────────────────────────────────────────────── */}
       <InputSection title="Acquisition">
