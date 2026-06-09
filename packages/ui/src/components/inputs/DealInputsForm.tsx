@@ -8,6 +8,7 @@ import { PercentInput } from './PercentInput';
 import { NumberInput } from './NumberInput';
 import { ToggleInput } from './ToggleInput';
 import { FixedExpenseRow } from './FixedExpenseRow';
+import { AutofillBar } from '../AutofillBar';
 
 export interface DealInputsFormProps {
   state: DealInputs;
@@ -26,6 +27,8 @@ export interface DealInputsFormProps {
   uiMode?: UiMode;
   /** RentCast API key from connectorStorage. Passed to AutofillBar (wired in RPE-43d). */
   apiKey?: string | null;
+  /** Base URL for apps/api. Defaults to http://localhost:3001. */
+  apiUrl?: string;
 }
 
 /**
@@ -42,7 +45,8 @@ export function DealInputsForm({
   dispatch,
   proFormaMode = false,
   uiMode = 'complex',
-  apiKey: _apiKey,  // unused until RPE-43d
+  apiKey = null,
+  apiUrl,
 }: DealInputsFormProps) {
   const { expenses } = state;
   const simple = uiMode === 'simple';
@@ -50,11 +54,26 @@ export function DealInputsForm({
   // Fixed-expense refs (only used in complex mode, declared here to avoid
   // repeated optional-chaining and keep JSX clean).
   const taxes = expenses.taxes as ExpenseInput;
+
+  const currentAutofillValues = {
+    purchasePrice: state.purchasePrice,
+    grossRent: state.grossRent,
+    sqft: state.sqft ?? null,
+    units: state.units ?? null,
+    // Normalise to annual so the preview diff compares apples-to-apples with
+    // RentCast's annualTaxes, which is always an annual figure.
+    annualTaxes: taxes.amount != null
+      ? taxes.period === 'monthly' ? taxes.amount * 12 : taxes.amount
+      : null,
+  };
   const insurance = expenses.insurance as ExpenseInput;
   const hoa = expenses.hoa ?? { amount: 0, period: 'monthly' as const };
 
   return (
     <div>
+      {/* ── Autofill bar (always shown, adapts when apiKey is null) ──────── */}
+      <AutofillBar dispatch={dispatch} apiKey={apiKey} apiUrl={apiUrl} currentValues={currentAutofillValues} />
+
       {/* ── Acquisition ──────────────────────────────────────────────────── */}
       <InputSection title="Acquisition">
         <CurrencyInput
