@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   type LocationState,
   DEFAULT_LOCATION,
+  STORAGE_KEY,
   loadLocation,
   saveLocation,
   clearLocationStorage,
@@ -85,6 +86,12 @@ describe('loadLocation', () => {
     store['rpe_location'] = JSON.stringify({ zip: ' 78701 ', stateCode: 'tx', label: ' TX · 78701 ' });
     expect(loadLocation()).toEqual({ zip: '78701', stateCode: 'TX', label: 'TX · 78701' });
   });
+
+  it('returns DEFAULT_LOCATION when stored zip is non-empty but not a valid ZIP5', () => {
+    // A corrupt/legacy entry with an invalid ZIP should be discarded entirely
+    store[STORAGE_KEY] = JSON.stringify({ zip: '1234', stateCode: 'TX', label: '' });
+    expect(loadLocation()).toEqual(DEFAULT_LOCATION);
+  });
 });
 
 // ─── saveLocation ─────────────────────────────────────────────────────────────
@@ -111,6 +118,12 @@ describe('saveLocation', () => {
     vi.stubGlobal('localStorage', throwingMock);
     expect(() => saveLocation({ zip: '12345', stateCode: '', label: '' })).not.toThrow();
     // afterEach will unstubAllGlobals; no manual restore needed
+  });
+
+  it('does not persist when zip is non-empty but not a valid ZIP5', () => {
+    // Guard: callers that bypass UI validation should not corrupt localStorage
+    saveLocation({ zip: '1234', stateCode: 'TX', label: '' });
+    expect(store[STORAGE_KEY]).toBeUndefined();
   });
 });
 
