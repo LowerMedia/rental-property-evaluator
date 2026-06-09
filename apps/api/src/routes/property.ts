@@ -73,8 +73,15 @@ export async function handleProperty(
         rate_limit: 429,
         unknown:    502,
       };
-      const status = statusMap[err.code];
-      json(res, status, { error: err.message });
+      // Use sanitised messages — never forward err.message which may contain
+      // the encoded address query string from the upstream RentCast request.
+      const clientMessages: Record<RentCastErrorCode, string> = {
+        bad_key:    'Invalid or expired API key.',
+        not_found:  'Property not found for this address.',
+        rate_limit: 'Rate limit reached. Check your RentCast plan.',
+        unknown:    'RentCast lookup failed.',
+      };
+      json(res, statusMap[err.code], { error: clientMessages[err.code] });
       return;
     }
     // Log address only — never apiKey
