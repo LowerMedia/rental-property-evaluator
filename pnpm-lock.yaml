@@ -168,6 +168,12 @@ importers:
         specifier: 'catalog:'
         version: 5.9.3
 
+  packages/property:
+    devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
   packages/region-defaults:
     devDependencies:
       typescript:
