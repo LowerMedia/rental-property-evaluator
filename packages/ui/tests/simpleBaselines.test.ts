@@ -129,6 +129,17 @@ describe('getSimpleBaselines — with LocationRateOverrides', () => {
     expect(b.expenses.insurance.amount).toBe(Math.round(300_000 * 0.005)); // 1500 (national 0.5 %)
     expect(b.vacancyPct).toBe(5);
   });
+
+  it('honours a zero override rate (falsy-zero guard — ?? not ||)', () => {
+    const b = getSimpleBaselines(300_000, {
+      propertyTaxRate: 0,
+      insuranceRate: 0,
+      sourceLabel: 'Hypothetical zero-rate region',
+    });
+    // 0 is a valid rate and must NOT fall back to national defaults
+    expect(b.expenses.taxes.amount).toBe(0);
+    expect(b.expenses.insurance.amount).toBe(0);
+  });
 });
 
 // ─── applySimpleBaselines ─────────────────────────────────────────────────────
