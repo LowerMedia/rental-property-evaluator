@@ -92,6 +92,27 @@ describe('resolveProperty — tier ordering', () => {
     expect(calls).toEqual(['first', 'second', 'third']);
   });
 
+  it('runs an unrecognised tier last, never ahead of trusted tiers', async () => {
+    const calls: string[] = [];
+    const make = (id: string, tier: string): PropertyProvider => ({
+      id,
+      tier: tier as LookupTier,
+      supports: () => true,
+      lookup: async () => {
+        calls.push(id);
+        return {};
+      },
+    });
+
+    await resolveProperty(REQUEST, [
+      make('mystery', 'telepathy'),
+      make('paste', 'paste'),
+      make('api', 'api'),
+    ]);
+
+    expect(calls).toEqual(['api', 'paste', 'mystery']);
+  });
+
   it('runs providers sequentially — a later provider never starts before an earlier one finishes', async () => {
     const events: string[] = [];
     const slow: PropertyProvider = {
@@ -179,6 +200,23 @@ describe('resolveProperty — early exit and merging', () => {
       source: 'paste-parser',
       confidence: 'low',
     });
+  });
+
+  it('drops foreign keys returned by a wild provider', async () => {
+    const wild = fakeProvider({
+      id: 'paste-parser',
+      tier: 'paste',
+      result: {
+        grossRent: field(2000, 'paste-parser', 'low'),
+        hoaFee: field(150, 'paste-parser', 'low'),
+        listingAgent: field(0, 'paste-parser', 'low'),
+      } as PropertyLookup,
+    });
+
+    const resolved = await resolveProperty(REQUEST, [wild]);
+
+    expect(Object.keys(resolved.lookup)).toEqual(['grossRent']);
+    expect(resolved.attempts[0].contributed).toEqual(['grossRent']);
   });
 
   it('returns an ok attempt with empty contribution when all fields were already set', async () => {
@@ -317,6 +355,19 @@ describe('resolveProperty — accept predicate', () => {
     expect(resolved.acceptable).toBe(true);
     expect(resolved.lookup.purchasePrice?.source).toBe('rentcast');
     expect(resolved.lookup.grossRent?.source).toBe('zillow-scrape');
+  });
+
+  it('fires no provider when an empty lookup already satisfies a custom predicate', async () => {
+    const api = fakeProvider({
+      id: 'rentcast',
+      tier: 'api',
+      result: { purchasePrice: field(300000, 'rentcast') },
+    });
+
+    const resolved = await resolveProperty(REQUEST, [api], { acceptable: () => true });
+
+    expect(api.lookupSpy).not.toHaveBeenCalled();
+    expect(resolved).toEqual({ lookup: {}, attempts: [], acceptable: true });
   });
 
   it('reports acceptable=false when the chain ends below the custom bar', async () => {
