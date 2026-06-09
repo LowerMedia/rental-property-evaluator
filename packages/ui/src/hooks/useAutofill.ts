@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import type { Dispatch } from 'react';
 import type { DealAction } from '../state/dealReducer';
 
@@ -49,6 +49,10 @@ export function useAutofill({
   // Tracks the AbortController for the latest in-flight request so a new
   // trigger() call can cancel a stale one and avoid out-of-order state updates.
   const abortRef = useRef<AbortController | null>(null);
+
+  // Abort any in-flight request on unmount to prevent state updates on an
+  // unmounted component.
+  useEffect(() => () => { abortRef.current?.abort(); }, []);
 
   const trigger = useCallback(
     async (address: string) => {
