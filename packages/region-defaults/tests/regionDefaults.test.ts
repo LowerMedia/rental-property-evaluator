@@ -24,14 +24,18 @@ describe('resolveRegionalRates', () => {
     expect(r.propertyTaxRate).toBe(STATE_RATES['CA']!.taxRate);
   });
 
-  it('NJ has the highest property tax rate in the dataset', () => {
-    const r = resolveRegionalRates('NJ');
-    expect(r.propertyTaxRate).toBeCloseTo(0.0213, 3);
+  it('IL has the highest property tax rate in the dataset', () => {
+    const r = resolveRegionalRates('IL');
+    expect(r.propertyTaxRate).toBeCloseTo(0.0222, 3);
+    const maxRate = Math.max(...Object.values(STATE_RATES).map((s) => s.taxRate));
+    expect(r.propertyTaxRate).toBe(maxRate);
   });
 
   it('HI has the lowest property tax rate in the dataset', () => {
     const r = resolveRegionalRates('HI');
     expect(r.propertyTaxRate).toBeCloseTo(0.0026, 3);
+    const minRate = Math.min(...Object.values(STATE_RATES).map((s) => s.taxRate));
+    expect(r.propertyTaxRate).toBe(minRate);
   });
 
   it('FL has notably high insurance rate', () => {
