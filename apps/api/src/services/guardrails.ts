@@ -147,9 +147,20 @@ export class RateLimiter {
     return win;
   }
 
+  /**
+   * Drop expired windows; if nothing expired (a key-rotation flood keeps
+   * every window live), evict oldest-inserted entries so memory stays
+   * bounded. An evicted live key restarts its window on next sight —
+   * acceptable: under such a flood the per-key identity is already noise.
+   */
   private prune(map: Map<string, Window>, ts: number, windowMs: number): void {
     for (const [key, win] of map) {
       if (ts - win.windowStart >= windowMs) map.delete(key);
+    }
+    while (map.size >= this.maxKeys) {
+      const oldest = map.keys().next().value;
+      if (oldest === undefined) break;
+      map.delete(oldest);
     }
   }
 }
@@ -159,6 +170,12 @@ export class RateLimiter {
 /**
  * Best-effort client IP: first hop of X-Forwarded-For (set by the edge in
  * serverless deployments), falling back to the socket address.
+ *
+ * Trust boundary: XFF is client-spoofable when this server is exposed
+ * directly (no edge proxy overwriting the header). The limiter therefore
+ * hard-caps its key maps (see RateLimiter.prune) so spoofing can dilute
+ * per-client fairness but cannot exhaust memory; deploy behind an edge
+ * for the per-IP guarantee to hold.
  */
 export function clientIp(req: IncomingMessage): string {
   const forwarded = req.headers['x-forwarded-for'];
