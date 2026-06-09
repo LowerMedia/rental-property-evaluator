@@ -24,8 +24,9 @@ interface DiffRow {
 }
 
 /**
- * Shows a diff of fields that will change when autofill is applied.
- * Null fields are omitted. Dismiss on Escape or Cancel; apply on Apply.
+ * Shows incoming RentCast values alongside current form values.
+ * All non-null RentCast fields are listed (not filtered to changed-only).
+ * Dismiss on Escape or Cancel; apply on Apply.
  */
 export function AutofillPreviewPopover({ data, onApply, onDismiss, currentValues }: AutofillPreviewPopoverProps) {
   // Dismiss on Escape
@@ -39,7 +40,7 @@ export function AutofillPreviewPopover({ data, onApply, onDismiss, currentValues
 
   const cur = currentValues ?? {};
   const fmtCurrent = (v: number | null | undefined, fmt: (n: number) => string) =>
-    (v != null && v !== 0) ? fmt(v) : '—';
+    v != null ? fmt(v) : '—';
 
   const rows: DiffRow[] = [
     { label: 'Purchase Price',    currentValue: fmtCurrent(cur.purchasePrice, fmtCurrency),     value: fmtCurrency(data.purchasePrice) },
