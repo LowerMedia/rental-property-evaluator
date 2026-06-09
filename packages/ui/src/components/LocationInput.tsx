@@ -41,10 +41,12 @@ export function LocationInput({
 
   const extractZip = (value: string): string => {
     const trimmed = value.trim();
-    // Accept bare ZIP5
-    if (/^\d{5}$/.test(trimmed)) return trimmed;
-    // Extract trailing ZIP5 from "City, ST XXXXX"
-    const match = trimmed.match(/(\d{5})$/);
+    // All-digit input: require exactly 5 — never silently truncate "123456" → "23456"
+    if (/^\d+$/.test(trimmed)) {
+      return /^\d{5}$/.test(trimmed) ? trimmed : '';
+    }
+    // "City, ST XXXXX" format: trailing ZIP5 must be preceded by a non-digit
+    const match = trimmed.match(/(?:[^\d])(\d{5})$/);
     return match ? (match[1] ?? '') : '';
   };
 
@@ -135,10 +137,23 @@ export function LocationInput({
           </button>
         </div>
       </div>
-      {zip !== '' && stateCode === '' && !resolving && (
-        <p className="text-xs text-yellow-400/80">
-          Resolving {zip}…
-        </p>
+      {zip !== '' && stateCode === '' && (
+        <div className="flex items-center gap-2">
+          <p className="text-xs text-yellow-400/80">
+            {resolving ? `Resolving ${zip}…` : `${zip} pending`}
+          </p>
+          <button
+            type="button"
+            onClick={handleClear}
+            aria-label={`Clear pending location ${zip}`}
+            className="
+              text-xs text-lo hover:text-fail transition-colors
+              leading-none rounded-full focus:outline-none focus:ring-1 focus:ring-accent
+            "
+          >
+            ×
+          </button>
+        </div>
       )}
       {validationError && (
         <p id="location-error" className="text-xs text-red-400" role="alert">
