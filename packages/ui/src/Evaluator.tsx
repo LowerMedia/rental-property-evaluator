@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useEffect } from 'react';
 import { evaluate, SCREENER_METRIC_CONFIG, calcLoanAmount, normalizeInputs } from '@rpe/engine';
 import type { DealInputs, ScreenerResults, ProFormaResults } from '@rpe/engine';
 import { useSavedDeals } from './hooks/useSavedDeals';
@@ -14,6 +14,18 @@ import { AmortizationPanel } from './components/AmortizationPanel';
 import { ProFormaPanel } from './components/ProFormaPanel';
 import { fmtCurrency, fmtPercent, fmtNumber, fmtMultiplier, NULL_DISPLAY } from './utils/format';
 import type { SavedDeal } from './state/savedDealsSchema';
+import { SIMPLE_RESULT_KEYS, type UiMode } from './state/uiMode';
+import { applySimpleBaselines } from './state/simpleBaselines';
+import { useLocationDefaults } from './hooks/useLocationDefaults';
+import { ConnectorSettingsModal } from './components/ConnectorSettingsModal';
+import { getRentCastKey } from './state/connectorStorage';
+import {
+  type LocationState,
+  DEFAULT_LOCATION,
+  loadLocation,
+  saveLocation,
+  clearLocationStorage,
+} from './state/locationState';
 
 // ─── Metric helpers ───────────────────────────────────────────────────────────
 
@@ -117,14 +129,30 @@ function ResultGroup({ title, children }: { title: string; children: React.React
   );
 }
 
+/**
+ * All scored metric keys (direction !== 'none') — used by the full ScoreCard in complex mode.
+ */
 const SCORED_KEYS: MetricKey[] = (
   Object.entries(SCREENER_METRIC_CONFIG) as [MetricKey, (typeof SCREENER_METRIC_CONFIG)[MetricKey]][]
 )
   .filter(([, cfg]) => cfg.direction !== 'none')
   .map(([key]) => key);
 
-function ScoreCard({ result }: { result: ScreenerResults }) {
-  const signals = SCORED_KEYS.map((k) => evalSignal(k, result[k]));
+/**
+ * Scored keys visible in simple mode — intersection of SCORED_KEYS and SIMPLE_RESULT_KEYS.
+ *
+ * Not every simple-tier metric has a pass/fail threshold: metrics with direction='none'
+ * in SCREENER_METRIC_CONFIG (e.g. totalCashInvested) are absent from SCORED_KEYS and
+ * therefore absent here too. ScoreCard uses this set in simple mode so the score
+ * denominator reflects the visible, scoreable subset rather than the full complex set.
+ */
+const SIMPLE_SCORED_KEYS: MetricKey[] = SCORED_KEYS.filter((k) =>
+  SIMPLE_RESULT_KEYS.includes(k),
+);
+
+function ScoreCard({ result, uiMode = 'complex' }: { result: ScreenerResults; uiMode?: UiMode }) {
+  const scoredKeys = uiMode === 'simple' ? SIMPLE_SCORED_KEYS : SCORED_KEYS;
+  const signals = scoredKeys.map((k) => evalSignal(k, result[k]));
   const total = signals.filter((s) => s !== 'null').length;
   const passing = signals.filter((s) => s === 'pass').length;
   const pct = total > 0 ? (passing / total) * 100 : 0;
@@ -154,11 +182,26 @@ function ScoreCard({ result }: { result: ScreenerResults }) {
   );
 }
 
-function ResultsPanel({ results }: { results: ScreenerResults }) {
+function ResultsPanel({ results, uiMode = 'complex' }: { results: ScreenerResults; uiMode?: UiMode }) {
+  const simple = uiMode === 'simple';
+
   return (
     <div className="flex flex-col gap-4">
-      <ScoreCard result={results} />
+      <ScoreCard result={results} uiMode={uiMode} />
 
+      {/* ── Assumptions badge (simple mode) ──────────────────────────────────── */}
+      {simple && (
+        <div
+          className="rounded border border-border bg-raised px-4 py-2 text-xs text-lo italic"
+          role="note"
+          aria-label="Results based on assumptions"
+        >
+          Results estimated using national-average financing and expense assumptions.
+          Switch to Complex mode to use your own figures.
+        </div>
+      )}
+
+      {/* ── Returns ──────────────────────────────────────────────────────────── */}
       <ResultGroup title="Returns">
         <MetricRow metricKey="capRate" result={results} />
         <MetricRow metricKey="cocRoi" result={results} />
@@ -166,80 +209,156 @@ function ResultsPanel({ results }: { results: ScreenerResults }) {
         <MetricRow metricKey="cashFlowAnnual" result={results} label="Cash Flow / yr" />
       </ResultGroup>
 
+      {/* ── Deal Quality ─────────────────────────────────────────────────────── */}
       <ResultGroup title="Deal Quality">
         <MetricRow metricKey="dscr" result={results} />
         <MetricRow metricKey="onePercentRule" result={results} label="1% Rule" />
-        <MetricRow metricKey="grm" result={results} />
-        <MetricRow metricKey="grossYield" result={results} />
+        {!simple && <MetricRow metricKey="grm" result={results} />}
+        {!simple && <MetricRow metricKey="grossYield" result={results} />}
         <MetricRow metricKey="breakEvenOccupancy" result={results} />
-        <MetricRow metricKey="expenseRatio" result={results} />
-        <MetricRow metricKey="fiftyPctRuleDeviation" result={results} label="50% Rule Dev." />
+        {!simple && <MetricRow metricKey="expenseRatio" result={results} />}
+        {!simple && <MetricRow metricKey="fiftyPctRuleDeviation" result={results} label="50% Rule Dev." />}
       </ResultGroup>
 
-      <ResultGroup title="Income & Expenses">
-        <MetricRow metricKey="egi" result={results} label="EGI / mo" />
-        <MetricRow metricKey="egiAnnual" result={results} label="EGI / yr" />
-        <MetricRow metricKey="noiMonthly" result={results} label="NOI / mo" />
-        <MetricRow metricKey="noiAnnual" result={results} label="NOI / yr" />
-        <MetricRow metricKey="opExMonthly" result={results} label="OpEx / mo" />
-        <MetricRow metricKey="opExAnnual" result={results} label="OpEx / yr" />
-        <MetricRow metricKey="piti" result={results} label="PITI / mo" />
-      </ResultGroup>
+      {/* ── Income & Expenses (complex only) ─────────────────────────────────── */}
+      {!simple && (
+        <ResultGroup title="Income & Expenses">
+          <MetricRow metricKey="egi" result={results} label="EGI / mo" />
+          <MetricRow metricKey="egiAnnual" result={results} label="EGI / yr" />
+          <MetricRow metricKey="noiMonthly" result={results} label="NOI / mo" />
+          <MetricRow metricKey="noiAnnual" result={results} label="NOI / yr" />
+          <MetricRow metricKey="opExMonthly" result={results} label="OpEx / mo" />
+          <MetricRow metricKey="opExAnnual" result={results} label="OpEx / yr" />
+          <MetricRow metricKey="piti" result={results} label="PITI / mo" />
+        </ResultGroup>
+      )}
 
-      <ResultGroup title="Loan">
-        <MetricRow metricKey="loanAmount" result={results} />
-        <MetricRow metricKey="mortgagePayment" result={results} label="P&I / mo" />
-        <MetricRow metricKey="ltv" result={results} />
-        <MetricRow metricKey="debtYield" result={results} />
-        <MetricRow metricKey="totalInterest" result={results} />
-      </ResultGroup>
+      {/* ── Loan (complex only) ──────────────────────────────────────────────── */}
+      {!simple && (
+        <ResultGroup title="Loan">
+          <MetricRow metricKey="loanAmount" result={results} />
+          <MetricRow metricKey="mortgagePayment" result={results} label="P&I / mo" />
+          <MetricRow metricKey="ltv" result={results} />
+          <MetricRow metricKey="debtYield" result={results} />
+          <MetricRow metricKey="totalInterest" result={results} />
+        </ResultGroup>
+      )}
 
+      {/* ── Capital ──────────────────────────────────────────────────────────── */}
       <ResultGroup title="Capital">
         <MetricRow metricKey="totalCashInvested" result={results} label="Total Cash In" />
-        {results.pricePerUnit !== null && <MetricRow metricKey="pricePerUnit" result={results} />}
-        {results.pricePerSqft !== null && <MetricRow metricKey="pricePerSqft" result={results} />}
+        {!simple && results.pricePerUnit !== null && (
+          <MetricRow metricKey="pricePerUnit" result={results} />
+        )}
+        {!simple && results.pricePerSqft !== null && (
+          <MetricRow metricKey="pricePerSqft" result={results} />
+        )}
       </ResultGroup>
     </div>
   );
 }
 
-// ─── Mode toggle ─────────────────────────────────────────────────────────────
+// ─── Mode toggles ─────────────────────────────────────────────────────────────
 
 interface ModeToggleProps {
   proFormaMode: boolean;
   onChange: (pf: boolean) => void;
+  /** When true, the Pro-Forma button is disabled (simple mode requires complex inputs). */
+  disableProForma?: boolean;
 }
 
-function ModeToggle({ proFormaMode, onChange }: ModeToggleProps) {
+function ModeToggle({ proFormaMode, onChange, disableProForma = false }: ModeToggleProps) {
+  return (
+    <>
+      {/*
+        Off-screen hint referenced by aria-describedby on the disabled Pro-Forma
+        button. Browser `title` tooltips are suppressed on disabled controls in
+        many user agents and are never announced by screen readers.
+      */}
+      {disableProForma && (
+        <span id="proforma-disabled-hint" className="sr-only">
+          Pro-Forma requires Complex mode. Switch to Complex mode to enable it.
+        </span>
+      )}
+      <div
+        className="flex rounded border border-border text-xs overflow-hidden"
+        role="group"
+        aria-label="Evaluation mode"
+      >
+        <button
+          type="button"
+          onClick={() => onChange(false)}
+          className={`px-3 py-1.5 uppercase tracking-widest transition-colors ${
+            !proFormaMode
+              ? 'bg-accent text-base font-semibold'
+              : 'text-lo hover:text-mid hover:bg-raised'
+          }`}
+          aria-pressed={!proFormaMode}
+        >
+          Screener
+        </button>
+        <button
+          type="button"
+          onClick={() => !disableProForma && onChange(true)}
+          disabled={disableProForma}
+          className={`px-3 py-1.5 uppercase tracking-widest transition-colors border-l border-border ${
+            disableProForma
+              ? 'text-lo/40 cursor-not-allowed'
+              : proFormaMode
+                ? 'bg-accent text-base font-semibold'
+                : 'text-lo hover:text-mid hover:bg-raised'
+          }`}
+          aria-pressed={proFormaMode}
+          aria-disabled={disableProForma}
+          aria-describedby={disableProForma ? 'proforma-disabled-hint' : undefined}
+        >
+          Pro-Forma
+        </button>
+      </div>
+    </>
+  );
+}
+
+interface UiModeToggleProps {
+  uiMode: UiMode;
+  onChange: (mode: UiMode) => void;
+}
+
+/**
+ * Simple / Complex mode selector.
+ * Simple mode shows 4 core inputs and 8 headline metrics; all other fields
+ * are hidden and supplied by national-average baseline assumptions.
+ */
+function UiModeToggle({ uiMode, onChange }: UiModeToggleProps) {
   return (
     <div
       className="flex rounded border border-border text-xs overflow-hidden"
       role="group"
-      aria-label="Evaluation mode"
+      aria-label="Input complexity"
     >
       <button
         type="button"
-        onClick={() => onChange(false)}
+        onClick={() => onChange('simple')}
         className={`px-3 py-1.5 uppercase tracking-widest transition-colors ${
-          !proFormaMode
+          uiMode === 'simple'
             ? 'bg-accent text-base font-semibold'
             : 'text-lo hover:text-mid hover:bg-raised'
         }`}
-        aria-pressed={!proFormaMode}
+        aria-pressed={uiMode === 'simple'}
       >
-        Screener
+        Simple
       </button>
       <button
         type="button"
-        onClick={() => onChange(true)}
+        onClick={() => onChange('complex')}
         className={`px-3 py-1.5 uppercase tracking-widest transition-colors border-l border-border ${
-          proFormaMode
+          uiMode === 'complex'
             ? 'bg-accent text-base font-semibold'
             : 'text-lo hover:text-mid hover:bg-raised'
         }`}
-        aria-pressed={proFormaMode}
+        aria-pressed={uiMode === 'complex'}
       >
-        Pro-Forma
+        Complex
       </button>
     </div>
   );
@@ -317,6 +436,91 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
 
   const [proFormaMode, setProFormaMode] = useState(false);
 
+  /**
+   * UI complexity mode — 'simple' hides advanced inputs and results and
+   * evaluates using national-average baseline assumptions for hidden fields.
+   * ComparisonPanel and ProFormaPanel are not uiMode-aware (E8 does not
+   * require them to be).
+   */
+  const [uiMode, setUiMode] = useState<UiMode>('complex');
+
+  /**
+   * Switch UI mode. Switching to simple also forces screener mode because
+   * pro-forma requires the complex-tier inputs that are hidden in simple mode.
+   */
+  const handleSetUiMode = useCallback((mode: UiMode) => {
+    setUiMode(mode);
+    if (mode === 'simple' && proFormaMode) {
+      setProFormaMode(false);
+    }
+  }, [proFormaMode]);
+
+  const [showSettings, setShowSettings] = useState(false);
+  const [apiKey, setApiKey] = useState<string | null>(() => getRentCastKey());
+
+  const apiUrl =
+    (import.meta as { env?: { VITE_API_URL?: string } }).env?.['VITE_API_URL'] ??
+    'http://localhost:3001';
+
+  // Refresh apiKey after the modal closes (user may have saved or removed)
+  const handleCloseSettings = useCallback(() => {
+    setShowSettings(false);
+    setApiKey(getRentCastKey());
+  }, []);
+
+  /**
+   * Location state for regional assumption defaults (RPE-64).
+   * zip='' means no location set. stateCode/label are populated after API resolution.
+   * Persisted to localStorage under locationState's STORAGE_KEY.
+   */
+  const [location, setLocation] = useState<LocationState>(() => loadLocation());
+
+  const handleZipChange = useCallback((zip: string) => {
+    const pending: LocationState = { zip, stateCode: '', label: '' };
+    setLocation(pending);
+    saveLocation(pending);
+  }, []);
+
+  const handleLocationClear = useCallback(() => {
+    setLocation(DEFAULT_LOCATION);
+    clearLocationStorage();
+  }, []);
+
+  /**
+   * useLocationDefaults — fetches regional rates for the current ZIP (RPE-66).
+   * When zip is '' (no location), returns no rates and resolving=false.
+   */
+  const {
+    rates: locationRates,
+    resolving: locationResolving,
+    failed: locationLookupFailed,
+    stateCode: resolvedStateCode,
+    label: resolvedLabel,
+  } = useLocationDefaults(location.zip, apiUrl);
+
+  /**
+   * Sync resolved stateCode/label back into persisted location state.
+   * Runs when the hook resolves a new ZIP so the chip shows the resolved label
+   * and localStorage stays up to date.
+   */
+  useEffect(() => {
+    if (
+      location.zip &&
+      resolvedStateCode &&
+      // Sync when either field drifts — a stored location can have the right
+      // stateCode but a stale/empty label (e.g. API label format changed)
+      (resolvedStateCode !== location.stateCode || resolvedLabel !== location.label)
+    ) {
+      const resolved: LocationState = {
+        zip: location.zip,
+        stateCode: resolvedStateCode,
+        label: resolvedLabel,
+      };
+      setLocation(resolved);
+      saveLocation(resolved);
+    }
+  }, [location.zip, location.stateCode, location.label, resolvedStateCode, resolvedLabel]);
+
   /** Seed pro-forma defaults into state the first time the user enters pro-forma mode. */
   const handleSetProFormaMode = useCallback((pf: boolean) => {
     setProFormaMode(pf);
@@ -336,17 +540,44 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
     }
   }, [activeInputs, dispatchToActive]);
 
-  /** Evaluate all scenarios; recomputes only when scenario inputs change. */
+  /**
+   * Evaluate all scenarios. In simple mode each scenario's inputs are run
+   * through applySimpleBaselines() first so the engine receives a fully-
+   * populated DealInputs with baseline values for all hidden complex fields.
+   */
+  // Location rate overrides (null when no location is set or rates not yet loaded).
+  // applySimpleBaselines accepts undefined — null → undefined coercion here is intentional.
+  const rateOverrides = locationRates ?? undefined;
+
   const resultsList = useMemo(
-    () => scenarios.map((s) => evaluate(s.inputs) as ScreenerResults),
-    [scenarios],
+    () =>
+      scenarios.map((s) =>
+        evaluate(
+          uiMode === 'simple' ? applySimpleBaselines(s.inputs, rateOverrides) : s.inputs,
+        ) as ScreenerResults,
+      ),
+    [scenarios, uiMode, rateOverrides],
   );
 
-  const activeResults = resultsList[activeIdx] ?? (evaluate(activeInputs) as ScreenerResults);
+  const activeResults =
+    resultsList[activeIdx] ??
+    (evaluate(
+      uiMode === 'simple' ? applySimpleBaselines(activeInputs, rateOverrides) : activeInputs,
+    ) as ScreenerResults);
   const isComparing = scenarios.length > 1;
 
-  /** Normalize active inputs once; used by AmortizationPanel and pro-forma mode. */
-  const activeNormalized = useMemo(() => normalizeInputs(activeInputs), [activeInputs]);
+  /**
+   * Normalize the active inputs once. In simple mode the baseline-applied
+   * inputs are used so AmortizationPanel and pro-forma calculations reflect
+   * the same assumptions as the results panel.
+   */
+  const activeNormalized = useMemo(
+    () =>
+      normalizeInputs(
+        uiMode === 'simple' ? applySimpleBaselines(activeInputs, rateOverrides) : activeInputs,
+      ),
+    [activeInputs, uiMode, rateOverrides],
+  );
   const proFormaResults = useMemo<ProFormaResults | null>(() => {
     if (!proFormaMode) return null;
     // Strip zero-valued optional rate fields so the engine treats them as "unset"
@@ -382,7 +613,26 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
           <span className="hidden text-xs text-lo sm:inline">{proFormaMode ? 'Pro-Forma' : 'Screener'}</span>
         </div>
         <div className="no-print flex items-center gap-2">
-          <ModeToggle proFormaMode={proFormaMode} onChange={handleSetProFormaMode} />
+          <button
+            type="button"
+            onClick={() => setShowSettings(true)}
+            className="
+              rounded border border-border px-3 py-1.5
+              text-xs text-mid uppercase tracking-widest
+              hover:border-accent hover:text-accent
+              transition-colors
+            "
+            aria-label="Open settings"
+            title="Settings"
+          >
+            ⚙
+          </button>
+          <UiModeToggle uiMode={uiMode} onChange={handleSetUiMode} />
+          <ModeToggle
+            proFormaMode={proFormaMode}
+            onChange={handleSetProFormaMode}
+            disableProForma={uiMode === 'simple'}
+          />
           <SavedDealsPanel
             currentInputs={activeInputs}
             deals={deals}
@@ -453,6 +703,15 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
               state={activeInputs}
               dispatch={dispatchToActive}
               proFormaMode={proFormaMode}
+              uiMode={uiMode}
+              apiKey={apiKey}
+              apiUrl={apiUrl}
+              location={location}
+              locationResolving={locationResolving}
+              locationLookupFailed={locationLookupFailed}
+              locationSourceLabel={locationRates?.sourceLabel}
+              onZipChange={handleZipChange}
+              onLocationClear={handleLocationClear}
             />
           </div>
         </aside>
@@ -471,7 +730,7 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
             <ComparisonPanel scenarios={scenarios} resultsList={resultsList} />
           ) : (
             <div className="flex flex-col gap-4">
-              <ResultsPanel results={activeResults} />
+              <ResultsPanel results={activeResults} uiMode={uiMode} />
               <AmortizationPanel
                 loanAmount={calcLoanAmount(activeNormalized)}
                 interestRate={activeNormalized.interestRate}
@@ -490,6 +749,9 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
           )}
         </section>
       </main>
+
+      {showSettings && <ConnectorSettingsModal onClose={handleCloseSettings} />}
     </div>
   );
 }
+

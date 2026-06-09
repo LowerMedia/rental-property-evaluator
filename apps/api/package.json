@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@rpe/engine": "workspace:*"
+    "@rpe/engine": "workspace:*",
+    "@rpe/region-defaults": "workspace:*",
+    "@rpe/rentcast": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
