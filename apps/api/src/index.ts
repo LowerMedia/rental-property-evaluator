@@ -45,6 +45,11 @@ import { evaluate } from '@rpe/engine';
 import type { DealInputs, EvalOptions } from '@rpe/engine';
 import { handleGeocode, type GeocodeDeps, type GeocodeSuccessBody } from './routes/geocode.js';
 import { handleProperty, type PropertyDeps, type PropertySuccessBody } from './routes/property.js';
+import {
+  handlePropertyContext,
+  type PropertyContextDeps,
+  type ContextSuccessBody,
+} from './routes/propertyContext.js';
 import { handleRegion } from './routes/region.js';
 import { RateLimiter, TtlCache } from './services/guardrails.js';
 
@@ -372,6 +377,15 @@ export function createApp(config: AppConfig = {}) {
     ),
   };
 
+  // Comps/history share the /property limiter — one provider-call budget
+  // per client across both endpoints (RPE-49)
+  const propertyContextDeps: PropertyContextDeps = {
+    cache: new TtlCache<ContextSuccessBody>(
+      config.property?.cacheTtlMs ?? envInt('RPE_PROPERTY_CACHE_TTL_MS', 24 * 60 * 60 * 1000),
+    ),
+    limiter: propertyDeps.limiter,
+  };
+
   // Address geometry does not move — geocode answers cache on the same
   // TTL knob as property lookups (RPE-46)
   const geocodeDeps: GeocodeDeps = {
@@ -404,6 +418,8 @@ export function createApp(config: AppConfig = {}) {
     const asyncHandler =
       url === '/evaluate' || url === '/evaluate/'
         ? () => handleEvaluate(req, res)
+        : url === '/property/context' || url === '/property/context/'
+        ? () => handlePropertyContext(req, res, json, readBody, propertyContextDeps)
         : url === '/property' || url === '/property/'
         ? () => handleProperty(req, res, json, readBody, propertyDeps)
         : url === '/region' || url === '/region/'
@@ -435,6 +451,7 @@ if (resolve(process.argv[1] ?? '') === __filename) {
     console.log('  GET  /health');
     console.log('  POST /evaluate');
     console.log('  POST /property');
+    console.log('  POST /property/context');
     console.log('  GET  /region?zip=XXXXX');
     console.log('  GET  /geocode?q=<address>');
   });
