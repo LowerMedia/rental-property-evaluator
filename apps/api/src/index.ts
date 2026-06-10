@@ -53,6 +53,7 @@ import {
 import { handleRegion } from './routes/region.js';
 import { handleScrape, type ScrapeDeps, type ScrapeSuccessBody } from './routes/scrape.js';
 import { RateLimiter, TtlCache } from './services/guardrails.js';
+import { Router, logRequest, normalizePath, resolveRequestId, v1Error } from './router.js';
 
 // Hoist __filename/__dirname for use in VERSION and the entry-point guard below.
 const __filename = fileURLToPath(import.meta.url);
@@ -420,8 +421,46 @@ export function createApp(config: AppConfig = {}) {
     ),
   };
 
+  // Handler-emitted error bodies carry the request id too (RPE-74) —
+  // the dispatcher sets X-Request-Id on the response before dispatch, so
+  // the wrapper recovers it without per-request closures
+  const jsonWithRequestId: typeof json = (rs, status, body) => {
+    const rid = String(rs.getHeader('X-Request-Id') ?? '');
+    if (status >= 400 && body !== null && typeof body === 'object' && !Array.isArray(body) && rid !== '') {
+      json(rs, status, { ...(body as Record<string, unknown>), requestId: rid });
+      return;
+    }
+    json(rs, status, body);
+  };
+
+  // ── Routes (RPE-74) — registered once; /v1 aliases resolve by prefix-strip
+  const router = new Router()
+    .on('GET', '/health', (rq, rs) => handleHealth(rq, rs))
+    .on('POST', '/evaluate', (rq, rs) => handleEvaluate(rq, rs))
+    .on('POST', '/property/context', (rq, rs) => handlePropertyContext(rq, rs, jsonWithRequestId, readBody, propertyContextDeps))
+    .on('POST', '/property', (rq, rs) => handleProperty(rq, rs, jsonWithRequestId, readBody, propertyDeps))
+    .on('GET', '/region', (rq, rs) => handleRegion(rq, rs, jsonWithRequestId))
+    .on('GET', '/geocode', (rq, rs) => handleGeocode(rq, rs, jsonWithRequestId, geocodeDeps))
+    .on('POST', '/scrape', (rq, rs) => handleScrape(rq, rs, jsonWithRequestId, readBody, scrapeDeps));
+
   return createServer((req: IncomingMessage, res: ServerResponse) => {
-    const url = req.url?.split('?')[0] ?? '/';
+    const startedAt = Date.now();
+    const requestId = resolveRequestId(req);
+    res.setHeader('X-Request-Id', requestId);
+
+    const rawPath = normalizePath(req.url?.split('?')[0] ?? '/');
+    const isV1 = rawPath === '/v1' || rawPath.startsWith('/v1/');
+    const path = isV1 ? normalizePath(rawPath.slice(3)) : rawPath;
+
+    res.on('finish', () => {
+      logRequest({
+        method: req.method ?? 'GET',
+        path: rawPath,
+        status: res.statusCode,
+        latencyMs: Date.now() - startedAt,
+        requestId,
+      });
+    });
 
     // Handle CORS preflight globally before routing
     if (req.method === 'OPTIONS') {
@@ -430,35 +469,37 @@ export function createApp(config: AppConfig = {}) {
       return;
     }
 
-    if (url === '/health' || url === '/health/') {
-      handleHealth(req, res);
+    // /v1-native: versioned health with API metadata
+    if (isV1 && path === '/health' && req.method === 'GET') {
+      json(res, 200, {
+        status: 'ok',
+        version: VERSION,
+        apiVersion: 'v1',
+        gitSha: process.env['GIT_SHA'] ?? null,
+      });
       return;
     }
 
-    // Route to async handlers; catch unhandled rejections so every request
-    // gets a response (createServer does not propagate Promise rejections).
-    const asyncHandler =
-      url === '/evaluate' || url === '/evaluate/'
-        ? () => handleEvaluate(req, res)
-        : url === '/property/context' || url === '/property/context/'
-        ? () => handlePropertyContext(req, res, json, readBody, propertyContextDeps)
-        : url === '/property' || url === '/property/'
-        ? () => handleProperty(req, res, json, readBody, propertyDeps)
-        : url === '/region' || url === '/region/'
-        ? () => handleRegion(req, res, json)
-        : url === '/geocode' || url === '/geocode/'
-        ? () => handleGeocode(req, res, json, geocodeDeps)
-        : url === '/scrape' || url === '/scrape/'
-        ? () => handleScrape(req, res, json, readBody, scrapeDeps)
-        : () => {
-            json(res, 404, { error: `Unknown endpoint: ${url}` });
-            return Promise.resolve();
-          };
+    const handler = router.resolve(req.method, path);
+    if (handler === undefined) {
+      // Unknown route: standard envelope on the /v1 surface, legacy flat
+      // shape (now with requestId) for unprefixed callers
+      if (isV1) {
+        json(res, 404, v1Error('not_found', `Unknown endpoint: ${rawPath}`, requestId));
+      } else {
+        json(res, 404, { error: `Unknown endpoint: ${rawPath}`, requestId });
+      }
+      return;
+    }
 
-    asyncHandler().catch((err: unknown) => {
-      console.error('Unhandled request error:', err instanceof Error ? err.stack : String(err));
+    // Catch unhandled rejections so every request gets a response
+    // (createServer does not propagate Promise rejections).
+    Promise.resolve(handler(req, res)).catch((err: unknown) => {
+      console.error('Unhandled request error:', err instanceof Error ? err.stack : String(err), 'requestId:', requestId);
       if (!res.headersSent) {
-        json(res, 500, { error: 'Internal server error' });
+        json(res, 500, isV1
+          ? v1Error('internal', 'Internal server error', requestId)
+          : { error: 'Internal server error', requestId });
       }
     });
   });
