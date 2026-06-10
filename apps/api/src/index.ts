@@ -52,6 +52,7 @@ import {
 } from './routes/propertyContext.js';
 import { handleRegion } from './routes/region.js';
 import { handleReports, type ValidatedEvalBody } from './routes/reports.js';
+import { buildOpenApiSpec, docsHtml } from './openapi.js';
 import { handleScrape, type ScrapeDeps, type ScrapeSuccessBody } from './routes/scrape.js';
 import { RateLimiter, TtlCache, clientIp } from './services/guardrails.js';
 import { Router, logRequest, normalizePath, resolveRequestId, v1Error } from './router.js';
@@ -481,6 +482,8 @@ export function createApp(config: AppConfig = {}) {
 
   // /v1-native routes (RPE-79) — never exposed on the legacy unprefixed surface
   const v1Router = new Router()
+    .on('GET', '/openapi.json', (rq, rs) => json(rs, 200, buildOpenApiSpec(VERSION)))
+    .on('GET', '/docs', (rq, rs) => sendRaw(rs, 200, 'text/html; charset=utf-8', docsHtml()))
     .on('POST', '/reports', (rq, rs) =>
       handleReports(rq, rs, jsonWithRequestId, readBody, {
         validate: validateEvaluateBody,
@@ -519,14 +522,18 @@ export function createApp(config: AppConfig = {}) {
     // /v1 auth (RPE-75): enforced when keys are configured; /v1/health
     // stays open for load balancers, legacy unprefixed routes stay open
     // for the SPA
+    const isV1Open =
+      isV1 &&
+      req.method === 'GET' &&
+      (path === '/health' || path === '/openapi.json' || path === '/docs');
     const isV1Health = isV1 && path === '/health' && req.method === 'GET';
     if (isV1 && apiKeys.size > 0) {
       const presented = extractApiKey(req.headers);
       const record = presented !== null ? apiKeys.verify(presented) : null;
       if (record !== null) {
         apiKeyId = record.id;
-      } else if (!isV1Health) {
-        // health identifies but never rejects (load balancers don't auth);
+      } else if (!isV1Open) {
+        // health/docs identify but never reject (load balancers and browsers don't auth);
         // everything else on /v1 requires a valid key
         json(res, 401, v1Error(
           'unauthorized',
