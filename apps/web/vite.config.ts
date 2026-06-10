@@ -3,6 +3,16 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
+  server: {
+    // E11 (RPE-96): cookie auth is same-origin by design — proxy /v1 to
+    // the local API so sessions work in dev without credentialed CORS
+    proxy: {
+      '/v1': {
+        target: process.env['RPE_API_PROXY'] ?? 'http://localhost:3001',
+        changeOrigin: false,
+      },
+    },
+  },
   plugins: [tailwindcss(), react()],
   build: {
     // Warn when any individual chunk exceeds 250 kB (gzip ~75 kB).
