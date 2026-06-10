@@ -15,7 +15,8 @@
     "@rpe/property": "workspace:*",
     "@rpe/region-defaults": "workspace:*",
     "@rpe/rentcast": "workspace:*",
-    "@rpe/report": "workspace:*"
+    "@rpe/report": "workspace:*",
+    "better-auth": "^1.6.16"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
