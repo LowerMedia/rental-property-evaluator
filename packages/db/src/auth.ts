@@ -16,8 +16,10 @@
 
 import { Algorithm, hash, verify } from '@node-rs/argon2';
 import { betterAuth } from 'better-auth';
+import { APIError, createAuthMiddleware } from 'better-auth/api';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import type { RpeDb } from './client.js';
+import { LoginThrottle } from './loginThrottle.js';
 
 /** OWASP password-storage cheat-sheet argon2id parameters. */
 const ARGON2ID_PARAMS = {
@@ -43,9 +45,25 @@ export interface CreateAuthOptions {
   sendVerificationOnSignUp?: boolean;
   /** Password-reset send hook (RPE-92 consumes). */
   sendResetPassword?: SendEmailHook;
+  /** Login brute-force throttle (RPE-91). Defaults to a fresh
+   * LoginThrottle; inject for deterministic tests. */
+  loginThrottle?: LoginThrottle;
+}
+
+const SIGN_IN_PATH = '/sign-in/email';
+
+function requestIp(headers: Headers | undefined): string {
+  // Prefer the dispatcher-resolved IP (RPE-76 trust boundary, includes
+  // socket fallback); raw XFF first-hop only as a secondary
+  const resolved = headers?.get('x-rpe-client-ip') ?? '';
+  if (resolved !== '') return resolved;
+  const fwd = headers?.get('x-forwarded-for') ?? '';
+  const first = fwd.split(',')[0]?.trim();
+  return first !== undefined && first !== '' ? first : 'unknown';
 }
 
 export function createAuth(options: CreateAuthOptions) {
+  const throttle = options.loginThrottle ?? new LoginThrottle();
   const database =
     options.db.dialect === 'postgres'
       ? drizzleAdapter(options.db.pg, { provider: 'pg' })
@@ -86,6 +104,29 @@ export function createAuth(options: CreateAuthOptions) {
       // NODE_ENV=test — pin it on so tests exercise exactly what
       // production enforces (caught by the RPE-89 harness)
       disableOriginCheck: false,
+    },
+    hooks: {
+      // Brute-force throttle on the sign-in path (RPE-91): the hook
+      // layer sees the parsed body, so lockout keys on the submitted
+      // email AND the client IP, with progressive backoff
+      before: createAuthMiddleware(async (ctx) => {
+        if (ctx.path !== SIGN_IN_PATH) return;
+        const email = typeof ctx.body?.email === 'string' ? ctx.body.email : '';
+        const decision = throttle.check(email, requestIp(ctx.request?.headers));
+        if (!decision.allowed) {
+          throw new APIError('TOO_MANY_REQUESTS', {
+            message: `Too many sign-in attempts. Try again in ${decision.retryAfterSec ?? 60}s.`,
+          });
+        }
+      }),
+      after: createAuthMiddleware(async (ctx) => {
+        if (ctx.path !== SIGN_IN_PATH) return;
+        const email = typeof ctx.body?.email === 'string' ? ctx.body.email : '';
+        const ip = requestIp(ctx.request?.headers);
+        const status = ctx.context.returned instanceof APIError ? ctx.context.returned.statusCode : 200;
+        if (status === 200) throttle.onSuccess(email, ip);
+        else if (status === 401) throttle.onFailure(email, ip);
+      }),
     },
   });
 }
