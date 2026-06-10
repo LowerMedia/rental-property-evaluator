@@ -30,7 +30,8 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "esbuild"
+      "esbuild",
+      "better-sqlite3"
     ],
     "overrides": {
       "@types/node": "^20.0.0"
