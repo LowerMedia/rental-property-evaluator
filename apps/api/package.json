@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@rpe/db": "workspace:*",
     "@rpe/engine": "workspace:*",
     "@rpe/property": "workspace:*",
     "@rpe/region-defaults": "workspace:*",
