@@ -686,11 +686,44 @@ export function createApp(config: AppConfig = {}) {
 
 // ── Entry point (skipped when imported by tests/other modules) ────────────────
 
+/**
+ * Build the cookie-session config from env (RPE-96 entry wiring):
+ * requires BETTER_AUTH_SECRET + DATABASE_URL + RPE_AUTH_BASE_URL.
+ * Returns undefined (auth surface 404s) when any is missing — the
+ * zero-config key-only deployment stays the default.
+ */
+async function sessionFromEnv(): Promise<{ auth: RpeAuth } | undefined> {
+  const secret = process.env['BETTER_AUTH_SECRET'] ?? '';
+  const baseURL = process.env['RPE_AUTH_BASE_URL'] ?? '';
+  if (secret === '' || baseURL === '' || (process.env['DATABASE_URL'] ?? '') === '') {
+    return undefined;
+  }
+  const { createDb } = await import('@rpe/db');
+  const { createSessionAuth } = await import('./services/session.js');
+  const { createMailerFromEnv } = await import('./services/mailer.js');
+  const db = createDb();
+  await db.applyMigrations();
+  const auth = createSessionAuth({
+    db,
+    secret,
+    baseURL,
+    trustedOrigins: (process.env['RPE_AUTH_TRUSTED_ORIGINS'] ?? baseURL).split(',').map((o) => o.trim()),
+    mailer: createMailerFromEnv(),
+    ...(process.env['RPE_REQUIRE_EMAIL_VERIFICATION'] === '1' ||
+    process.env['RPE_REQUIRE_EMAIL_VERIFICATION'] === 'true'
+      ? { requireEmailVerification: true }
+      : {}),
+  });
+  return { auth };
+}
+
 if (resolve(process.argv[1] ?? '') === __filename) {
   const port = validatePort(process.env['PORT']);
   const host = process.env['HOST'] ?? '0.0.0.0';
-  const server = createApp();
+  const session = await sessionFromEnv();
+  const server = createApp(session !== undefined ? { session } : {});
   server.listen(port, host, () => {
+    if (session !== undefined) console.log('  /v1/auth/* (cookie sessions enabled)');
     console.log(`@rpe/api ${VERSION} listening on http://${host}:${port}`);
     console.log('  GET  /health');
     console.log('  POST /evaluate');
