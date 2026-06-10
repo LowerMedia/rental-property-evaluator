@@ -10,7 +10,8 @@
     "build": "tsc"
   },
   "dependencies": {
-    "@rpe/engine": "workspace:*"
+    "@rpe/engine": "workspace:*",
+    "pdf-lib": "^1.17.1"
   },
   "devDependencies": {
     "typescript": "catalog:"
