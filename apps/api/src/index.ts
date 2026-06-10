@@ -413,6 +413,8 @@ export interface AppConfig {
    * RPE_API_KEYS env JSON, or RPE_API_KEYS_FILE. */
   auth?: {
     keys?: ApiKeyRecord[];
+    /** RPE-83: a pre-built store (e.g. DbApiKeyStore) — wins over keys/env. */
+    store?: Pick<ApiKeyStore, 'size' | 'verify' | 'revoke'>;
   };
   /** /v1 public-surface throttle (RPE-76) — keyed by api key id, per-IP
    * for unauthenticated paths. In-memory fixed windows: a shared store
@@ -494,7 +496,7 @@ export function createApp(config: AppConfig = {}) {
   const corsAllowlist =
     config.cors?.origins ?? parseCorsOrigins(process.env['RPE_CORS_ORIGINS']);
 
-  const apiKeys = ApiKeyStore.fromEnv(config.auth?.keys);
+  const apiKeys = config.auth?.store ?? ApiKeyStore.fromEnv(config.auth?.keys);
   const sessionAuthHandler =
     config.session !== undefined ? toNodeHandler(config.session.auth) : null;
 
@@ -692,17 +694,22 @@ export function createApp(config: AppConfig = {}) {
  * Returns undefined (auth surface 404s) when any is missing — the
  * zero-config key-only deployment stays the default.
  */
-async function sessionFromEnv(): Promise<{ auth: RpeAuth } | undefined> {
-  const secret = process.env['BETTER_AUTH_SECRET'] ?? '';
-  const baseURL = process.env['RPE_AUTH_BASE_URL'] ?? '';
-  if (secret === '' || baseURL === '' || (process.env['DATABASE_URL'] ?? '') === '') {
-    return undefined;
-  }
+async function dbFromEnv(): Promise<import('@rpe/db').RpeDb | undefined> {
+  if ((process.env['DATABASE_URL'] ?? '') === '') return undefined;
   const { createDb } = await import('@rpe/db');
-  const { createSessionAuth } = await import('./services/session.js');
-  const { createMailerFromEnv } = await import('./services/mailer.js');
   const db = createDb();
   await db.applyMigrations();
+  return db;
+}
+
+async function sessionFromEnv(db: import('@rpe/db').RpeDb | undefined): Promise<{ auth: RpeAuth } | undefined> {
+  const secret = process.env['BETTER_AUTH_SECRET'] ?? '';
+  const baseURL = process.env['RPE_AUTH_BASE_URL'] ?? '';
+  if (secret === '' || baseURL === '' || db === undefined) {
+    return undefined;
+  }
+  const { createSessionAuth } = await import('./services/session.js');
+  const { createMailerFromEnv } = await import('./services/mailer.js');
   const auth = createSessionAuth({
     db,
     secret,
@@ -720,8 +727,24 @@ async function sessionFromEnv(): Promise<{ auth: RpeAuth } | undefined> {
 if (resolve(process.argv[1] ?? '') === __filename) {
   const port = validatePort(process.env['PORT']);
   const host = process.env['HOST'] ?? '0.0.0.0';
-  const session = await sessionFromEnv();
-  const server = createApp(session !== undefined ? { session } : {});
+  const entryDb = await dbFromEnv();
+  const session = await sessionFromEnv(entryDb);
+  // RPE-83: opt into DB-backed API keys (instant fleet revocation via
+  // periodic refresh); default stays the RPE-75 env/file allowlist
+  let keyStore: Pick<ApiKeyStore, 'size' | 'verify' | 'revoke'> | undefined;
+  if (process.env['RPE_API_KEYS_SOURCE'] === 'db' && entryDb !== undefined) {
+    const { DbApiKeyStore } = await import('./services/dbApiKeys.js');
+    const store = await DbApiKeyStore.load(entryDb);
+    const refreshSec = Number(process.env['RPE_API_KEYS_REFRESH_SEC'] ?? '30');
+    if (Number.isFinite(refreshSec) && refreshSec > 0) {
+      setInterval(() => void store.refresh().catch(() => undefined), refreshSec * 1000).unref();
+    }
+    keyStore = store;
+  }
+  const server = createApp({
+    ...(session !== undefined ? { session } : {}),
+    ...(keyStore !== undefined ? { auth: { store: keyStore } } : {}),
+  });
   server.listen(port, host, () => {
     if (session !== undefined) console.log('  /v1/auth/* (cookie sessions enabled)');
     console.log(`@rpe/api ${VERSION} listening on http://${host}:${port}`);
