@@ -23,3 +23,5 @@ export {
   type MetricSignal,
   type ReportMetric,
 } from './report';
+
+export { reportToPdf } from './pdf';
