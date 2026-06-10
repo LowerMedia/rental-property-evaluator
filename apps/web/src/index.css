@@ -90,10 +90,35 @@ button:focus-visible,
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--color-muted); border-radius: 2px; }
 
+/* ── Light theme (RPE-69) ───────────────────────────────────────────────
+   Same palette as the print override below — kept as a separate block so
+   screen theming and print remain independently tunable. Applied by the
+   pre-paint bootstrap in index.html + the ThemeToggle (rpe_theme). */
+html[data-theme="light"] {
+  --color-base:      #ffffff;
+  --color-surface:   #f7f7f7;
+  --color-raised:    #eeeeee;
+  --color-input:     #f2f2f2;
+  --color-border:    #d8d8d8;
+  --color-border-2:  #c0c0c0;
+  --color-hi:        #111111;
+  --color-mid:       #555555;
+  --color-lo:        #888888;
+  --color-muted:     #cccccc;
+  --color-accent:    #b07010;
+  --color-accent-dim:#ddaa44;
+  --color-pass:      #166534;
+  --color-fail:      #991b1b;
+  --color-warn:      #92400e;
+  --color-null:      #999999;
+}
+
 /* ── Print / PDF ────────────────────────────────────────────────────────── */
 @media print {
-  /* Light-theme variable overrides */
-  :root {
+  /* Light-theme variable overrides — selector includes the data-theme
+     hook so print stays light even when dark is the active theme */
+  :root,
+  html[data-theme] {
     --color-base:      #ffffff;
     --color-surface:   #f7f7f7;
     --color-raised:    #eeeeee;
