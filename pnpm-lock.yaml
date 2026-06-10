@@ -83,6 +83,9 @@ importers:
       '@rpe/rentcast':
         specifier: workspace:*
         version: link:../../packages/rentcast
+      '@rpe/report':
+        specifier: workspace:*
+        version: link:../../packages/report
     devDependencies:
       '@types/node':
         specifier: ^20.0.0
