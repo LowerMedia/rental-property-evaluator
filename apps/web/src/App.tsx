@@ -14,6 +14,10 @@ const adConfig: AdConfig | undefined =
       }
     : undefined;
 
+// E11 (RPE-96): cookie-session auth shell. Same-origin only — dev uses
+// the Vite /v1 proxy; production must serve SPA + API from one origin.
+const authEnabled = import.meta.env['VITE_AUTH_ENABLED'] === 'true';
+
 export default function App() {
-  return <Evaluator adConfig={adConfig} />;
+  return <Evaluator adConfig={adConfig} authEnabled={authEnabled} />;
 }

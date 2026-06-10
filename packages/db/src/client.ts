@@ -14,6 +14,7 @@
  * staging secret).
  */
 
+import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
@@ -25,7 +26,34 @@ import pg from 'pg';
 import { pgSchema } from './schema.pg.js';
 import { sqliteSchema } from './schema.sqlite.js';
 
-const MIGRATIONS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../migrations');
+/**
+ * Locate the checked-in migrations. The source-relative path breaks
+ * when this module is BUNDLED (import.meta.url then points inside the
+ * consumer's dist), so candidates are tried in order:
+ *   1. RPE_MIGRATIONS_DIR (deploys point at the shipped folder)
+ *   2. next to the executing bundle (dist/migrations)
+ *   3. source-relative (monorepo dev/test)
+ *   4. workspace-relative from cwd (bundled api run from apps/api)
+ */
+function migrationsDir(): string {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    process.env['RPE_MIGRATIONS_DIR'],
+    resolve(here, 'migrations'),
+    resolve(here, '../migrations'),
+    resolve(process.cwd(), '../../packages/db/migrations'),
+    resolve(process.cwd(), 'packages/db/migrations'),
+  ].filter((c): c is string => c !== undefined && c !== '');
+  const found = candidates.find((c) => existsSync(c));
+  if (found === undefined) {
+    throw new Error(
+      `@rpe/db: migrations folder not found — set RPE_MIGRATIONS_DIR. Tried: ${candidates.join(', ')}`,
+    );
+  }
+  return found;
+}
+
+const MIGRATIONS_DIR = migrationsDir();
 
 export type Dialect = 'postgres' | 'sqlite';
 

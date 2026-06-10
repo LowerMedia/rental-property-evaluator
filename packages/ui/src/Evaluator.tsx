@@ -10,6 +10,9 @@ import { DealInputsForm } from './components/inputs/DealInputsForm';
 import { SavedDealsPanel } from './components/SavedDealsPanel';
 import { ScenarioTabs } from './components/ScenarioTabs';
 import { ThemeToggle } from './components/ThemeToggle';
+import { AuthProvider } from './state/AuthContext';
+import { AccountMenu } from './components/auth/AccountMenu';
+import { AuthScreen } from './components/auth/AuthScreen';
 import { ComparisonPanel } from './components/ComparisonPanel';
 import { AmortizationPanel } from './components/AmortizationPanel';
 import { ProFormaPanel } from './components/ProFormaPanel';
@@ -465,7 +468,26 @@ export interface AdConfig {
  * Single scenario: standard two-panel layout (inputs | ResultsPanel).
  * 2–4 scenarios: ScenarioTabs on the inputs panel + ComparisonPanel on the right.
  */
-export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
+export interface EvaluatorProps {
+  adConfig?: AdConfig;
+  /** E11 (RPE-96): mount the cookie-session auth shell — login/register/
+   * reset screens on hash routes, account menu, org switcher. OFF by
+   * default so embeds (WP block) keep the tool fully public. */
+  authEnabled?: boolean;
+}
+
+export function Evaluator({ adConfig, authEnabled = false }: EvaluatorProps) {
+  if (authEnabled) {
+    return (
+      <AuthProvider>
+        <EvaluatorInner adConfig={adConfig} authEnabled />
+      </AuthProvider>
+    );
+  }
+  return <EvaluatorInner adConfig={adConfig} authEnabled={false} />;
+}
+
+function EvaluatorInner({ adConfig, authEnabled }: { adConfig?: AdConfig; authEnabled: boolean }) {
   const {
     scenarios,
     activeIdx,
@@ -661,6 +683,7 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
         </div>
         <div className="no-print flex items-center gap-2">
           <ThemeToggle />
+          {authEnabled ? <AccountMenu /> : null}
           <button
             type="button"
             onClick={() => setShowSettings(true)}
@@ -730,6 +753,7 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
           </button>
         </div>
       </header>
+      {authEnabled ? <AuthScreen /> : null}
 
       {/* ── Body ── */}
       <main className="flex-1 min-h-0 flex flex-col lg:grid lg:grid-cols-[380px_1fr]">
