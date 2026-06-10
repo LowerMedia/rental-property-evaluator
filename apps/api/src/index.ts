@@ -52,7 +52,7 @@ import {
 } from './routes/propertyContext.js';
 import { handleRegion } from './routes/region.js';
 import { handleScrape, type ScrapeDeps, type ScrapeSuccessBody } from './routes/scrape.js';
-import { RateLimiter, TtlCache } from './services/guardrails.js';
+import { RateLimiter, TtlCache, clientIp } from './services/guardrails.js';
 import { Router, logRequest, normalizePath, resolveRequestId, v1Error } from './router.js';
 import { ApiKeyStore, extractApiKey, type ApiKeyRecord } from './services/apiKeys.js';
 
@@ -367,6 +367,14 @@ export interface AppConfig {
   auth?: {
     keys?: ApiKeyRecord[];
   };
+  /** /v1 public-surface throttle (RPE-76) — keyed by api key id, per-IP
+   * for unauthenticated paths. In-memory fixed windows: a shared store
+   * (e.g. Redis) is required before horizontal scaling. Env:
+   * RPE_V1_RPM (default 120), RPE_V1_DAILY_CAP (default 10000). */
+  v1RateLimit?: {
+    rpm?: number;
+    dailyCap?: number;
+  };
   /** /scrape fallback (RPE-51). OFF unless RPE_SCRAPE_ENABLED=1/true —
    * enabling in production is a product/legal call. Env: RPE_SCRAPE_RPM
    * (default 5), RPE_SCRAPE_DAILY_CAP (default 50). */
@@ -431,6 +439,11 @@ export function createApp(config: AppConfig = {}) {
 
   const apiKeys = ApiKeyStore.fromEnv(config.auth?.keys);
 
+  const v1Limiter = new RateLimiter(
+    config.v1RateLimit?.rpm ?? envInt('RPE_V1_RPM', 120),
+    config.v1RateLimit?.dailyCap ?? envInt('RPE_V1_DAILY_CAP', 10000),
+  );
+
   // Handler-emitted error bodies carry the request id too (RPE-74) —
   // the dispatcher sets X-Request-Id on the response before dispatch, so
   // the wrapper recovers it without per-request closures
@@ -481,8 +494,48 @@ export function createApp(config: AppConfig = {}) {
       return;
     }
 
+    // /v1 auth (RPE-75): enforced when keys are configured; /v1/health
+    // stays open for load balancers, legacy unprefixed routes stay open
+    // for the SPA
+    const isV1Health = isV1 && path === '/health' && req.method === 'GET';
+    if (isV1 && apiKeys.size > 0) {
+      const presented = extractApiKey(req.headers);
+      const record = presented !== null ? apiKeys.verify(presented) : null;
+      if (record !== null) {
+        apiKeyId = record.id;
+      } else if (!isV1Health) {
+        // health identifies but never rejects (load balancers don't auth);
+        // everything else on /v1 requires a valid key
+        json(res, 401, v1Error(
+          'unauthorized',
+          'A valid API key is required — send Authorization: Bearer <key> or X-API-Key.',
+          requestId,
+        ));
+        return;
+      }
+    }
+
+    // /v1 throttle (RPE-76): keyed by api key identity, per-IP fallback
+    // for unauthenticated paths (health, zero-config dev). Quota headers
+    // on every /v1 response.
+    if (isV1) {
+      const decision = v1Limiter.check(apiKeyId ?? `ip:${clientIp(req)}`);
+      if (decision.limit !== undefined) res.setHeader('X-RateLimit-Limit', String(decision.limit));
+      if (decision.remaining !== undefined) res.setHeader('X-RateLimit-Remaining', String(decision.remaining));
+      if (decision.resetSec !== undefined) res.setHeader('X-RateLimit-Reset', String(decision.resetSec));
+      if (!decision.allowed) {
+        res.setHeader('Retry-After', String(decision.retryAfterSec ?? 60));
+        json(res, 429, v1Error(
+          'rate_limited',
+          'Rate limit exceeded — slow down and retry after the indicated interval.',
+          requestId,
+        ));
+        return;
+      }
+    }
+
     // /v1-native: versioned health with API metadata
-    if (isV1 && path === '/health' && req.method === 'GET') {
+    if (isV1Health) {
       json(res, 200, {
         status: 'ok',
         version: VERSION,
