@@ -14,12 +14,15 @@
  * in lockstep with the feature flags here.
  */
 
+import { randomUUID } from 'node:crypto';
 import { Algorithm, hash, verify } from '@node-rs/argon2';
 import { betterAuth } from 'better-auth';
 import { organization } from 'better-auth/plugins/organization';
 import { APIError, createAuthMiddleware } from 'better-auth/api';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import type { RpeDb } from './client.js';
+import { pgSchema } from './schema.pg.js';
+import { sqliteSchema } from './schema.sqlite.js';
 import { LoginThrottle } from './loginThrottle.js';
 
 /** OWASP password-storage cheat-sheet argon2id parameters. */
@@ -52,6 +55,10 @@ export interface CreateAuthOptions {
   /** Reset-request spam throttle (RPE-92) — same mechanism, request-count
    * policy (every request counts; responses are always neutral). */
   resetRequestThrottle?: LoginThrottle;
+  /** RPE-90: block sign-in until the email is verified, return a
+   * neutral no-enumeration sign-up response, and send the verification
+   * email on sign-up. OFF by default (sessions issue immediately). */
+  requireEmailVerification?: boolean;
   /** Org-invite email hook (RPE-93) — bound to the Mailer by apps/api. */
   sendOrgInvite?: (data: { email: string; orgName: string; url: string }) => Promise<void>;
   /** Base URL of the front-end accept page for invite links (RPE-93). */
@@ -79,6 +86,33 @@ function requestIp(headers: Headers | undefined): string {
   return first !== undefined && first !== '' ? first : 'unknown';
 }
 
+/** Byte-identical sign-up response when requireEmailVerification is on. */
+const NEUTRAL_SIGN_UP = {
+  status: true,
+  message: 'Check your email to verify your account.',
+} as const;
+
+/** RPE-90: every new user gets a default org + owner membership. */
+async function createDefaultOrg(db: RpeDb, user: { id: string; name: string; email: string }): Promise<void> {
+  const orgId = randomUUID();
+  const now = new Date();
+  const orgName = `${user.name !== '' ? user.name : user.email.split('@')[0]}'s Workspace`;
+  const member = {
+    id: randomUUID(),
+    organizationId: orgId,
+    userId: user.id,
+    role: 'owner',
+    createdAt: now,
+  };
+  if (db.dialect === 'postgres') {
+    await db.pg.insert(pgSchema.organization).values({ id: orgId, name: orgName, slug: `ws-${user.id.toLowerCase()}`, createdAt: now });
+    await db.pg.insert(pgSchema.member).values(member);
+    return;
+  }
+  await db.sqlite.insert(sqliteSchema.organization).values({ id: orgId, name: orgName, slug: `ws-${user.id.toLowerCase()}`, createdAt: now });
+  await db.sqlite.insert(sqliteSchema.member).values(member);
+}
+
 export function createAuth(options: CreateAuthOptions) {
   const throttle = options.loginThrottle ?? new LoginThrottle();
   const resetThrottle = options.resetRequestThrottle ?? new LoginThrottle(Date.now, RESET_REQUEST_POLICY);
@@ -95,6 +129,8 @@ export function createAuth(options: CreateAuthOptions) {
     database,
     emailAndPassword: {
       enabled: true,
+      minPasswordLength: 10, // RPE-90 password policy
+      requireEmailVerification: options.requireEmailVerification ?? false,
       password: {
         hash: (password) => hash(password, ARGON2ID_PARAMS),
         verify: ({ hash: stored, password }) => verify(stored, password),
@@ -112,13 +148,23 @@ export function createAuth(options: CreateAuthOptions) {
     ...(options.sendVerificationEmail !== undefined
       ? {
           emailVerification: {
-            sendOnSignUp: options.sendVerificationOnSignUp ?? false,
+            sendOnSignUp: (options.sendVerificationOnSignUp ?? false) || (options.requireEmailVerification ?? false),
             sendVerificationEmail: async ({ user, url }) => {
               await options.sendVerificationEmail!({ email: user.email, url });
             },
           },
         }
       : {}),
+    databaseHooks: {
+      user: {
+        create: {
+          // RPE-90: first registration provisions the default org
+          after: async (user) => {
+            await createDefaultOrg(options.db, user);
+          },
+        },
+      },
+    },
     advanced: {
       // better-auth SKIPS the CSRF origin check by default when
       // NODE_ENV=test — pin it on so tests exercise exactly what
@@ -148,6 +194,12 @@ export function createAuth(options: CreateAuthOptions) {
       before: createAuthMiddleware(async (ctx) => {
         const email = typeof ctx.body?.email === 'string' ? ctx.body.email : '';
         const ip = requestIp(ctx.request?.headers);
+        if (ctx.path === '/sign-up/email' && (options.requireEmailVerification ?? false)) {
+          // No enumeration: duplicates short-circuit to the same neutral
+          // body the after-hook returns for fresh sign-ups
+          const existing = await ctx.context.internalAdapter.findUserByEmail(email);
+          if (existing !== null) return ctx.json(NEUTRAL_SIGN_UP);
+        }
         if (ctx.path === SIGN_IN_PATH) {
           const decision = throttle.check(email, ip);
           if (!decision.allowed) {
@@ -168,6 +220,11 @@ export function createAuth(options: CreateAuthOptions) {
         }
       }),
       after: createAuthMiddleware(async (ctx) => {
+        if (ctx.path === '/sign-up/email' && (options.requireEmailVerification ?? false)) {
+          // Fresh sign-ups get the same neutral body as duplicates
+          if (!(ctx.context.returned instanceof APIError)) return ctx.json(NEUTRAL_SIGN_UP);
+          return;
+        }
         if (ctx.path !== SIGN_IN_PATH) return;
         const email = typeof ctx.body?.email === 'string' ? ctx.body.email : '';
         const ip = requestIp(ctx.request?.headers);
