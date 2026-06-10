@@ -51,6 +51,7 @@ import {
   type ContextSuccessBody,
 } from './routes/propertyContext.js';
 import { handleRegion } from './routes/region.js';
+import { handleReports, type ValidatedEvalBody } from './routes/reports.js';
 import { handleScrape, type ScrapeDeps, type ScrapeSuccessBody } from './routes/scrape.js';
 import { RateLimiter, TtlCache, clientIp } from './services/guardrails.js';
 import { Router, logRequest, normalizePath, resolveRequestId, v1Error } from './router.js';
@@ -85,6 +86,24 @@ function json(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, {
     'Content-Type': 'application/json',
     'Content-Length': Buffer.byteLength(payload),
+    ...CORS_HEADERS,
+  });
+  res.end(payload);
+}
+
+/** Raw (non-JSON) response writer for downloads — CORS included (RPE-79). */
+function sendRaw(
+  res: ServerResponse,
+  status: number,
+  contentType: string,
+  body: Uint8Array | string,
+  disposition?: string,
+): void {
+  const payload = typeof body === 'string' ? Buffer.from(body, 'utf8') : Buffer.from(body);
+  res.writeHead(status, {
+    'Content-Type': contentType,
+    'Content-Length': payload.byteLength,
+    ...(disposition !== undefined ? { 'Content-Disposition': disposition } : {}),
     ...CORS_HEADERS,
   });
   res.end(payload);
@@ -186,6 +205,114 @@ function handleHealth(req: IncomingMessage, res: ServerResponse): void {
   json(res, 200, { status: 'ok', version: VERSION });
 }
 
+/**
+ * Validate an evaluate/report request body (RPE-79 — shared by
+ * handleEvaluate and POST /v1/reports so the contract can't drift).
+ * Messages preserved verbatim from the original inline validation.
+ */
+export function validateEvaluateBody(parsed: unknown): ValidatedEvalBody {
+  const parsedObj = parsed as Record<string, unknown>;
+  if (
+    typeof parsed !== 'object' ||
+    parsed === null ||
+    !Object.hasOwn(parsedObj, 'inputs') ||
+    typeof parsedObj['inputs'] !== 'object' ||
+    parsedObj['inputs'] === null
+  ) {
+    return {
+      ok: false,
+      message: 'Request body must be { inputs: DealInputs, opts?: { mode: "screener" | "proforma" } }',
+    };
+  }
+
+  // Guard: opts, if present, must be a plain object — not a string, number, null, or array.
+  // Own-property check prevents prototype-chain values from satisfying the presence guard.
+  const rawOpts = Object.hasOwn(parsedObj, 'opts') ? parsedObj['opts'] : undefined;
+  if (
+    rawOpts !== undefined &&
+    (typeof rawOpts !== 'object' || rawOpts === null || Array.isArray(rawOpts))
+  ) {
+    return { ok: false, message: 'opts must be an object, e.g. { "mode": "screener" }' };
+  }
+
+  const { inputs, opts } = parsed as { inputs: DealInputs; opts?: EvalOptions };
+
+  if (opts?.mode !== undefined && !VALID_MODES.has(opts.mode)) {
+    return { ok: false, message: `opts.mode must be "screener" or "proforma", got "${opts.mode}"` };
+  }
+
+  // Validate required top-level fields — both presence AND type.
+  // Engine normalises absent/null numerics to 0 and non-boolean rollClosingCostsIntoLoan
+  // via Boolean() to false, both producing misleading results without a prior 400.
+  const REQUIRED_NUMERIC = [
+    'purchasePrice', 'percentDown', 'interestRate', 'loanTermYears',
+    'closingCosts', 'grossRent', 'vacancyPct',
+  ] as const;
+  const REQUIRED_BOOLEAN = ['rollClosingCostsIntoLoan'] as const;
+  const rawInputs = inputs as unknown as Record<string, unknown>;
+
+  const invalidFields: string[] = [
+    ...REQUIRED_NUMERIC.filter(
+      (k) =>
+        !Object.hasOwn(rawInputs, k) ||
+        typeof rawInputs[k] !== 'number' ||
+        !Number.isFinite(rawInputs[k] as number),
+    ),
+    ...REQUIRED_BOOLEAN.filter(
+      (k) => !Object.hasOwn(rawInputs, k) || typeof rawInputs[k] !== 'boolean',
+    ),
+  ];
+  if (invalidFields.length > 0) {
+    return { ok: false, message: `Invalid or missing required input fields: ${invalidFields.join(', ')}` };
+  }
+
+  // Guard: expenses must be a plain object — not null, not array.
+  const expField = Object.hasOwn(rawInputs, 'expenses') ? rawInputs['expenses'] : undefined;
+  if (typeof expField !== 'object' || expField === null || Array.isArray(expField)) {
+    return {
+      ok: false,
+      message:
+        'inputs.expenses must be an object including taxes and insurance, each { amount: number, period: "monthly" | "annual" }',
+    };
+  }
+  const expObj = expField as Record<string, unknown>;
+
+  if (!Object.hasOwn(expObj, 'taxes') || !Object.hasOwn(expObj, 'insurance')) {
+    return {
+      ok: false,
+      message:
+        'inputs.expenses must include taxes and insurance, each { amount: number, period: "monthly" | "annual" }',
+    };
+  }
+
+  const EXPENSE_ITEM_KEYS = new Set(['taxes', 'insurance', 'hoa', 'other']);
+  const EXPENSE_PCT_KEYS = new Set(['capExPct', 'maintPct', 'mgmtPct', 'miscPct']);
+
+  const invalidItemKeys = Object.keys(expObj).filter(
+    (k) => EXPENSE_ITEM_KEYS.has(k) && !isValidExpenseItem(expObj[k]),
+  );
+  if (invalidItemKeys.length > 0) {
+    const qualifiedItemKeys = invalidItemKeys.map((k) => `inputs.expenses.${k}`).join(', ');
+    return { ok: false, message: `${qualifiedItemKeys} must each be { amount: number, period: "monthly" | "annual" }` };
+  }
+
+  const invalidPctKeys = Object.keys(expObj).filter(
+    (k) =>
+      EXPENSE_PCT_KEYS.has(k) &&
+      (typeof expObj[k] !== 'number' || !Number.isFinite(expObj[k] as number)),
+  );
+  if (invalidPctKeys.length > 0) {
+    const qualifiedPctKeys = invalidPctKeys.map((k) => `inputs.expenses.${k}`).join(', ');
+    return { ok: false, message: `${qualifiedPctKeys} must each be a finite number` };
+  }
+
+  const format = Object.hasOwn(parsedObj, 'format') && typeof parsedObj['format'] === 'string'
+    ? parsedObj['format']
+    : null;
+
+  return { ok: true, inputs, opts, format };
+}
+
 async function handleEvaluate(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method !== 'POST') {
     json(res, 405, { error: 'Method not allowed — use POST' });
@@ -210,128 +337,14 @@ async function handleEvaluate(req: IncomingMessage, res: ServerResponse): Promis
     return;
   }
 
-  const parsedObj = parsed as Record<string, unknown>;
-  if (
-    typeof parsed !== 'object' ||
-    parsed === null ||
-    !Object.hasOwn(parsedObj, 'inputs') ||
-    typeof parsedObj['inputs'] !== 'object' ||
-    parsedObj['inputs'] === null
-  ) {
-    json(res, 400, {
-      error:
-        'Request body must be { inputs: DealInputs, opts?: { mode: "screener" | "proforma" } }',
-    });
-    return;
-  }
-
-  // Guard: opts, if present, must be a plain object — not a string, number, null, or array.
-  // Without this check, `opts: "screener"` or `opts: null` would silently pass through
-  // the mode validation and reach evaluate() with the wrong shape.
-  // Own-property check prevents prototype-chain values from satisfying the presence guard.
-  const rawOpts = Object.hasOwn(parsedObj, 'opts') ? parsedObj['opts'] : undefined;
-  if (
-    rawOpts !== undefined &&
-    (typeof rawOpts !== 'object' || rawOpts === null || Array.isArray(rawOpts))
-  ) {
-    json(res, 400, { error: 'opts must be an object, e.g. { "mode": "screener" }' });
-    return;
-  }
-
-  const { inputs, opts } = parsed as { inputs: DealInputs; opts?: EvalOptions };
-
-  if (opts?.mode !== undefined && !VALID_MODES.has(opts.mode)) {
-    json(res, 400, {
-      error: `opts.mode must be "screener" or "proforma", got "${opts.mode}"`,
-    });
-    return;
-  }
-
-  // Validate required top-level fields — both presence AND type.
-  // Engine normalises absent/null numerics to 0 and non-boolean rollClosingCostsIntoLoan
-  // via Boolean() to false, both producing misleading results without a prior 400.
-  // Non-finite numbers (Infinity, NaN) are also rejected — consistent with isValidExpenseItem.
-  const REQUIRED_NUMERIC = [
-    'purchasePrice', 'percentDown', 'interestRate', 'loanTermYears',
-    'closingCosts', 'grossRent', 'vacancyPct',
-  ] as const;
-  const REQUIRED_BOOLEAN = ['rollClosingCostsIntoLoan'] as const;
-  const rawInputs = inputs as unknown as Record<string, unknown>;
-
-  const invalidFields: string[] = [
-    ...REQUIRED_NUMERIC.filter(
-      (k) =>
-        !Object.hasOwn(rawInputs, k) ||
-        typeof rawInputs[k] !== 'number' ||
-        !Number.isFinite(rawInputs[k] as number),
-    ),
-    ...REQUIRED_BOOLEAN.filter(
-      (k) => !Object.hasOwn(rawInputs, k) || typeof rawInputs[k] !== 'boolean',
-    ),
-  ];
-  if (invalidFields.length > 0) {
-    json(res, 400, {
-      error: `Invalid or missing required input fields: ${invalidFields.join(', ')}`,
-    });
-    return;
-  }
-
-  // Guard: expenses must be a plain object — not null, not array.
-  const expField = Object.hasOwn(rawInputs, 'expenses') ? rawInputs['expenses'] : undefined;
-  if (typeof expField !== 'object' || expField === null || Array.isArray(expField)) {
-    json(res, 400, {
-      error:
-        'inputs.expenses must be an object including taxes and insurance, each { amount: number, period: "monthly" | "annual" }',
-    });
-    return;
-  }
-  const expObj = expField as Record<string, unknown>;
-
-  // taxes and insurance are required ExpenseInput fields.
-  if (!Object.hasOwn(expObj, 'taxes') || !Object.hasOwn(expObj, 'insurance')) {
-    json(res, 400, {
-      error:
-        'inputs.expenses must include taxes and insurance, each { amount: number, period: "monthly" | "annual" }',
-    });
-    return;
-  }
-
-  // DealExpenses has two field categories — validate each appropriately:
-  //   ExpenseInput fields (taxes, insurance, hoa, other): { amount: number, period: "monthly"|"annual" }
-  //   Numeric % fields (capExPct, maintPct, mgmtPct, miscPct): finite number
-  // Keys outside these two sets are not validated and are silently ignored by the engine
-  // (normalizeExpenses() only maps known fields).
-  const EXPENSE_ITEM_KEYS = new Set(['taxes', 'insurance', 'hoa', 'other']);
-  const EXPENSE_PCT_KEYS = new Set(['capExPct', 'maintPct', 'mgmtPct', 'miscPct']);
-
-  const invalidItemKeys = Object.keys(expObj).filter(
-    (k) => EXPENSE_ITEM_KEYS.has(k) && !isValidExpenseItem(expObj[k]),
-  );
-  if (invalidItemKeys.length > 0) {
-    // Fully-qualify each key so the message is unambiguous (no "inputs.expenses.taxes, hoa" dotted-path confusion).
-    const qualifiedItemKeys = invalidItemKeys.map((k) => `inputs.expenses.${k}`).join(', ');
-    json(res, 400, {
-      error: `${qualifiedItemKeys} must each be { amount: number, period: "monthly" | "annual" }`,
-    });
-    return;
-  }
-
-  const invalidPctKeys = Object.keys(expObj).filter(
-    (k) =>
-      EXPENSE_PCT_KEYS.has(k) &&
-      (typeof expObj[k] !== 'number' || !Number.isFinite(expObj[k] as number)),
-  );
-  if (invalidPctKeys.length > 0) {
-    // Fully-qualify each key so the message is unambiguous.
-    const qualifiedPctKeys = invalidPctKeys.map((k) => `inputs.expenses.${k}`).join(', ');
-    json(res, 400, {
-      error: `${qualifiedPctKeys} must each be a finite number`,
-    });
+  const validated = validateEvaluateBody(parsed);
+  if (!validated.ok) {
+    json(res, 400, { error: validated.message });
     return;
   }
 
   try {
-    const results = evaluate(inputs, opts);
+    const results = evaluate(validated.inputs, validated.opts);
     json(res, 200, { results });
   } catch (err) {
     // Log full details server-side; return a generic message to clients.
@@ -466,6 +479,15 @@ export function createApp(config: AppConfig = {}) {
     .on('GET', '/geocode', (rq, rs) => handleGeocode(rq, rs, jsonWithRequestId, geocodeDeps))
     .on('POST', '/scrape', (rq, rs) => handleScrape(rq, rs, jsonWithRequestId, readBody, scrapeDeps));
 
+  // /v1-native routes (RPE-79) — never exposed on the legacy unprefixed surface
+  const v1Router = new Router()
+    .on('POST', '/reports', (rq, rs) =>
+      handleReports(rq, rs, jsonWithRequestId, readBody, {
+        validate: validateEvaluateBody,
+        engineVersion: VERSION,
+        sendRaw,
+      }));
+
   return createServer((req: IncomingMessage, res: ServerResponse) => {
     const startedAt = Date.now();
     const requestId = resolveRequestId(req);
@@ -545,7 +567,8 @@ export function createApp(config: AppConfig = {}) {
       return;
     }
 
-    const handler = router.resolve(req.method, path);
+    const handler = (isV1 ? v1Router.resolve(req.method, path) : undefined)
+      ?? router.resolve(req.method, path);
     if (handler === undefined) {
       // Unknown route: standard envelope on the /v1 surface, legacy flat
       // shape (now with requestId) for unprefixed callers
@@ -584,6 +607,7 @@ if (resolve(process.argv[1] ?? '') === __filename) {
     console.log('  POST /property/context');
     console.log('  GET  /region?zip=XXXXX');
     console.log('  GET  /geocode?q=<address>');
+    console.log('  POST /v1/reports (json|csv|pdf)');
   });
   server.on('error', (err) => {
     console.error('Server error:', err);
