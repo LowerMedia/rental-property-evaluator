@@ -4,6 +4,21 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
+    <!-- Theme bootstrap (RPE-69) — applied before first paint to avoid a
+         flash of the wrong theme. Mirrors packages/ui resolveInitialTheme:
+         stored choice (rpe_theme) -> OS preference -> dark. -->
+    <script>
+      (function () {
+        var theme = 'dark';
+        try {
+          var stored = localStorage.getItem('rpe_theme');
+          if (stored === 'light' || stored === 'dark') theme = stored;
+          else if (window.matchMedia('(prefers-color-scheme: light)').matches) theme = 'light';
+        } catch (e) { /* storage unavailable - keep dark */ }
+        document.documentElement.setAttribute('data-theme', theme);
+      })();
+    </script>
+
     <!-- ═══════════════════════════════════════════════════════════════
          Primary SEO (RPE-38)
          Origin is driven by VITE_APP_ORIGIN (see .env / .env.production).

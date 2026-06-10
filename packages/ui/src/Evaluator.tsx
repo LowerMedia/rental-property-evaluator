@@ -9,6 +9,7 @@ import { AdSlot } from './components/AdSlot';
 import { DealInputsForm } from './components/inputs/DealInputsForm';
 import { SavedDealsPanel } from './components/SavedDealsPanel';
 import { ScenarioTabs } from './components/ScenarioTabs';
+import { ThemeToggle } from './components/ThemeToggle';
 import { ComparisonPanel } from './components/ComparisonPanel';
 import { AmortizationPanel } from './components/AmortizationPanel';
 import { ProFormaPanel } from './components/ProFormaPanel';
@@ -659,6 +660,7 @@ export function Evaluator({ adConfig }: { adConfig?: AdConfig }) {
           <span className="hidden text-xs text-lo sm:inline">{proFormaMode ? 'Pro-Forma' : 'Screener'}</span>
         </div>
         <div className="no-print flex items-center gap-2">
+          <ThemeToggle />
           <button
             type="button"
             onClick={() => setShowSettings(true)}
