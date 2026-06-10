@@ -1,23 +1,5 @@
-import { RentCastError, type PropertyData, type RentCastErrorCode } from './types';
-
-const BASE = 'https://api.rentcast.io/v1';
-
-function statusToCode(status: number): RentCastErrorCode {
-  if (status === 401 || status === 403) return 'bad_key';
-  if (status === 404) return 'not_found';
-  if (status === 429) return 'rate_limit';
-  return 'unknown';
-}
-
-async function rcGet(path: string, apiKey: string): Promise<unknown> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { 'X-Api-Key': apiKey, Accept: 'application/json' },
-  });
-  if (!res.ok) {
-    throw new RentCastError(statusToCode(res.status), `RentCast ${res.status}: ${path.split('?')[0]}`);
-  }
-  return res.json() as Promise<unknown>;
-}
+import { RentCastError, type PropertyData } from './types';
+import { rcGet } from './http';
 
 function ensureRentCastError(reason: unknown): RentCastError {
   if (reason instanceof RentCastError) return reason;
@@ -70,6 +52,9 @@ export async function fetchPropertyData(
   let sqft: number | null        = null;
   let units: number | null       = null;
   let annualTaxes: number | null = null;
+  let bedrooms: number | null    = null;
+  let bathrooms: number | null   = null;
+  let yearBuilt: number | null   = null;
 
   // /properties 404 is soft (property not in database); other failures are fatal
   if (props.status === 'rejected') {
@@ -84,13 +69,19 @@ export async function fetchPropertyData(
     const list = props.value as Array<{
       squareFootage?: number;
       units?: number;
+      bedrooms?: number;
+      bathrooms?: number;
+      yearBuilt?: number;
       // propertyTaxes is keyed by tax year: { "2023": { total: number } }
       propertyTaxes?: Record<string, { total: number }>;
     }>;
     const p = list[0];
     if (p) {
-      sqft  = typeof p.squareFootage === 'number' ? p.squareFootage : null;
-      units = typeof p.units         === 'number' ? p.units         : null;
+      sqft      = typeof p.squareFootage === 'number' ? p.squareFootage : null;
+      units     = typeof p.units         === 'number' ? p.units         : null;
+      bedrooms  = typeof p.bedrooms      === 'number' ? p.bedrooms      : null;
+      bathrooms = typeof p.bathrooms     === 'number' ? p.bathrooms     : null;
+      yearBuilt = typeof p.yearBuilt     === 'number' ? p.yearBuilt     : null;
       if (p.propertyTaxes) {
         const years      = Object.keys(p.propertyTaxes).sort().reverse();
         const latestYear = years[0];
@@ -100,5 +91,5 @@ export async function fetchPropertyData(
     }
   }
 
-  return { purchasePrice, grossRent, sqft, units, annualTaxes };
+  return { purchasePrice, grossRent, sqft, units, annualTaxes, bedrooms, bathrooms, yearBuilt };
 }

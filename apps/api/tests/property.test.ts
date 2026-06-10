@@ -29,6 +29,9 @@ const MOCK_DATA = {
   sqft: 1_480,
   units: 1,
   annualTaxes: 4_210,
+  bedrooms: 3,
+  bathrooms: 2,
+  yearBuilt: 1987,
 };
 
 describe('POST /property', () => {
@@ -38,7 +41,10 @@ describe('POST /property', () => {
   beforeAll(
     () =>
       new Promise<void>((resolve, reject) => {
-        server = createApp();
+        // Guardrails are exercised in guardrails.test.ts — disable the cache
+        // here (tests reuse one address with different mocked outcomes) and
+        // keep limits far above what this suite generates.
+        server = createApp({ property: { cacheTtlMs: 0, rpm: 1000, dailyCap: 10000 } });
         server.once('error', reject);
         server.listen(0, '127.0.0.1', () => {
           server.off('error', reject);
@@ -71,6 +77,18 @@ describe('POST /property', () => {
 
     expect(res.status).toBe(200);
     expect(body['data']).toEqual(MOCK_DATA);
+    // RPE-45 envelope: provenance-tagged lookup + cache flag
+    expect(body['cached']).toBe(false);
+    expect(body['lookup']).toEqual({
+      purchasePrice: { value: 342_000, source: 'rentcast', confidence: 'medium' },
+      grossRent:     { value: 2_150,   source: 'rentcast', confidence: 'medium' },
+      sqft:          { value: 1_480,   source: 'rentcast', confidence: 'high' },
+      units:         { value: 1,       source: 'rentcast', confidence: 'high' },
+      annualTaxes:   { value: 4_210,   source: 'rentcast', confidence: 'high' },
+      bedrooms:      { value: 3,       source: 'rentcast', confidence: 'high' },
+      bathrooms:     { value: 2,       source: 'rentcast', confidence: 'high' },
+      yearBuilt:     { value: 1987,    source: 'rentcast', confidence: 'high' },
+    });
   });
 
   it('calls fetchPropertyData with the address and apiKey from the request', async () => {
@@ -112,7 +130,7 @@ describe('POST /property', () => {
 
   // ── RentCast error mapping ──────────────────────────────────────────────────
 
-  it('returns 401 when fetchPropertyData throws bad_key', async () => {
+  it('returns 401 with code bad_key when fetchPropertyData throws bad_key', async () => {
     mockFetch.mockRejectedValue(new RentCastError('bad_key', 'bad key'));
     const res = await fetch(`${base}/property`, {
       method: 'POST',
@@ -120,6 +138,8 @@ describe('POST /property', () => {
       body: JSON.stringify(VALID_BODY),
     });
     expect(res.status).toBe(401);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body['code']).toBe('bad_key');
   });
 
   it('returns 404 when fetchPropertyData throws not_found', async () => {

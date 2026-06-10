@@ -45,6 +45,19 @@ export function addScenario(
 }
 
 /**
+ * Append a scenario with an explicit name and inputs (RPE-68 — used by
+ * "Load Example"). No-op at MAX_SCENARIOS, same as addScenario.
+ */
+export function addNamedScenario(
+  scenarios: Scenario[],
+  name: string,
+  inputs: DealInputs,
+): Scenario[] {
+  if (scenarios.length >= MAX_SCENARIOS) return scenarios;
+  return [...scenarios, createScenario(name, structuredClone(inputs))];
+}
+
+/**
  * Remove scenario at idx.  No-op if already at MIN_SCENARIOS or idx is out of bounds.
  * Returns the new scenarios array + the corrected activeIdx.
  */

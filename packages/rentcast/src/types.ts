@@ -27,4 +27,10 @@ export interface PropertyData {
   units: number | null;
   /** Annual property taxes from /properties — null if not found */
   annualTaxes: number | null;
+  /** Bedroom count from /properties — null if not found (RPE-48) */
+  bedrooms: number | null;
+  /** Bathroom count from /properties — null if not found (RPE-48) */
+  bathrooms: number | null;
+  /** Year built from /properties — null if not found (RPE-48) */
+  yearBuilt: number | null;
 }

@@ -4,8 +4,8 @@ export default defineConfig({
   test: {
     passWithNoTests: true,
     include: [
-      'packages/*/tests/**/*.test.ts',
-      'packages/*/src/**/*.test.ts',
+      'packages/*/tests/**/*.test.{ts,tsx}',
+      'packages/*/src/**/*.test.{ts,tsx}',
       'apps/*/tests/**/*.test.ts',
     ],
     coverage: {

@@ -74,6 +74,9 @@ importers:
       '@rpe/engine':
         specifier: workspace:*
         version: link:../../packages/engine
+      '@rpe/property':
+        specifier: workspace:*
+        version: link:../../packages/property
       '@rpe/region-defaults':
         specifier: workspace:*
         version: link:../../packages/region-defaults
@@ -168,6 +171,16 @@ importers:
         specifier: 'catalog:'
         version: 5.9.3
 
+  packages/property:
+    dependencies:
+      '@rpe/engine':
+        specifier: workspace:*
+        version: link:../engine
+    devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
   packages/region-defaults:
     devDependencies:
       typescript:
@@ -185,6 +198,9 @@ importers:
       '@rpe/engine':
         specifier: workspace:*
         version: link:../engine
+      '@rpe/property':
+        specifier: workspace:*
+        version: link:../property
       '@rpe/region-defaults':
         specifier: workspace:*
         version: link:../region-defaults

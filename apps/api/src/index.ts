@@ -43,8 +43,16 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { evaluate } from '@rpe/engine';
 import type { DealInputs, EvalOptions } from '@rpe/engine';
-import { handleProperty } from './routes/property.js';
+import { handleGeocode, type GeocodeDeps, type GeocodeSuccessBody } from './routes/geocode.js';
+import { handleProperty, type PropertyDeps, type PropertySuccessBody } from './routes/property.js';
+import {
+  handlePropertyContext,
+  type PropertyContextDeps,
+  type ContextSuccessBody,
+} from './routes/propertyContext.js';
 import { handleRegion } from './routes/region.js';
+import { handleScrape, type ScrapeDeps, type ScrapeSuccessBody } from './routes/scrape.js';
+import { RateLimiter, TtlCache } from './services/guardrails.js';
 
 // Hoist __filename/__dirname for use in VERSION and the entry-point guard below.
 const __filename = fileURLToPath(import.meta.url);
@@ -332,7 +340,86 @@ async function handleEvaluate(req: IncomingMessage, res: ServerResponse): Promis
 
 // ── App factory ────────────────────────────────────────────────────────────────
 
-export function createApp() {
+/**
+ * /property cost-guardrail config (RPE-45). Env defaults:
+ *   RPE_PROPERTY_CACHE_TTL_MS — success-response cache TTL, default 24 h, 0 disables
+ *   RPE_PROPERTY_RPM          — per-IP requests/minute reaching the provider, default 30
+ *   RPE_PROPERTY_DAILY_CAP    — per-IP daily provider-call cap, default 300
+ */
+export interface AppConfig {
+  property?: {
+    cacheTtlMs?: number;
+    rpm?: number;
+    dailyCap?: number;
+  };
+  /** /geocode guardrails (RPE-46). Env: RPE_GEOCODE_RPM (default 60),
+   * RPE_GEOCODE_DAILY_CAP (default 1000); cache shares the property TTL knob. */
+  geocode?: {
+    rpm?: number;
+    dailyCap?: number;
+  };
+  /** /scrape fallback (RPE-51). OFF unless RPE_SCRAPE_ENABLED=1/true —
+   * enabling in production is a product/legal call. Env: RPE_SCRAPE_RPM
+   * (default 5), RPE_SCRAPE_DAILY_CAP (default 50). */
+  scrape?: {
+    enabled?: boolean;
+    rpm?: number;
+    dailyCap?: number;
+  };
+}
+
+function envInt(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === '') return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
+export function createApp(config: AppConfig = {}) {
+  const propertyDeps: PropertyDeps = {
+    cache: new TtlCache<PropertySuccessBody>(
+      config.property?.cacheTtlMs ?? envInt('RPE_PROPERTY_CACHE_TTL_MS', 24 * 60 * 60 * 1000),
+    ),
+    limiter: new RateLimiter(
+      config.property?.rpm ?? envInt('RPE_PROPERTY_RPM', 30),
+      config.property?.dailyCap ?? envInt('RPE_PROPERTY_DAILY_CAP', 300),
+    ),
+  };
+
+  // Comps/history share the /property limiter — one provider-call budget
+  // per client across both endpoints (RPE-49)
+  const propertyContextDeps: PropertyContextDeps = {
+    cache: new TtlCache<ContextSuccessBody>(
+      config.property?.cacheTtlMs ?? envInt('RPE_PROPERTY_CACHE_TTL_MS', 24 * 60 * 60 * 1000),
+    ),
+    limiter: propertyDeps.limiter,
+  };
+
+  const scrapeDeps: ScrapeDeps = {
+    enabled:
+      config.scrape?.enabled ??
+      ['1', 'true'].includes((process.env['RPE_SCRAPE_ENABLED'] ?? '').toLowerCase()),
+    cache: new TtlCache<ScrapeSuccessBody>(
+      config.property?.cacheTtlMs ?? envInt('RPE_PROPERTY_CACHE_TTL_MS', 24 * 60 * 60 * 1000),
+    ),
+    limiter: new RateLimiter(
+      config.scrape?.rpm ?? envInt('RPE_SCRAPE_RPM', 5),
+      config.scrape?.dailyCap ?? envInt('RPE_SCRAPE_DAILY_CAP', 50),
+    ),
+  };
+
+  // Address geometry does not move — geocode answers cache on the same
+  // TTL knob as property lookups (RPE-46)
+  const geocodeDeps: GeocodeDeps = {
+    cache: new TtlCache<GeocodeSuccessBody>(
+      config.property?.cacheTtlMs ?? envInt('RPE_PROPERTY_CACHE_TTL_MS', 24 * 60 * 60 * 1000),
+    ),
+    limiter: new RateLimiter(
+      config.geocode?.rpm ?? envInt('RPE_GEOCODE_RPM', 60),
+      config.geocode?.dailyCap ?? envInt('RPE_GEOCODE_DAILY_CAP', 1000),
+    ),
+  };
+
   return createServer((req: IncomingMessage, res: ServerResponse) => {
     const url = req.url?.split('?')[0] ?? '/';
 
@@ -353,10 +440,16 @@ export function createApp() {
     const asyncHandler =
       url === '/evaluate' || url === '/evaluate/'
         ? () => handleEvaluate(req, res)
+        : url === '/property/context' || url === '/property/context/'
+        ? () => handlePropertyContext(req, res, json, readBody, propertyContextDeps)
         : url === '/property' || url === '/property/'
-        ? () => handleProperty(req, res, json, readBody)
+        ? () => handleProperty(req, res, json, readBody, propertyDeps)
         : url === '/region' || url === '/region/'
         ? () => handleRegion(req, res, json)
+        : url === '/geocode' || url === '/geocode/'
+        ? () => handleGeocode(req, res, json, geocodeDeps)
+        : url === '/scrape' || url === '/scrape/'
+        ? () => handleScrape(req, res, json, readBody, scrapeDeps)
         : () => {
             json(res, 404, { error: `Unknown endpoint: ${url}` });
             return Promise.resolve();
@@ -382,7 +475,9 @@ if (resolve(process.argv[1] ?? '') === __filename) {
     console.log('  GET  /health');
     console.log('  POST /evaluate');
     console.log('  POST /property');
+    console.log('  POST /property/context');
     console.log('  GET  /region?zip=XXXXX');
+    console.log('  GET  /geocode?q=<address>');
   });
   server.on('error', (err) => {
     console.error('Server error:', err);
