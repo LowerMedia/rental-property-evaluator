@@ -36,10 +36,11 @@ Origin is configured at `github.com:LowerMedia/rental-property-evaluator`. Full 
 pnpm lint && pnpm typecheck && pnpm test && pnpm build
 ```
 
-All four must pass. Tests currently: 878 tests, 52 files. The API
-regression suite (apps/api/tests/regression.test.ts, see
-docs/api-testing.md) rides in `pnpm test` — a red API suite blocks the
-release.
+All four must pass. Tests currently: 931 tests, 63 files. Two release
+gates ride in `pnpm test` and a red gate blocks the release: the API
+regression suite (apps/api/tests/regression.test.ts) and the E11 auth
+security gate (apps/api/tests/authGate.test.ts) — see
+docs/api-testing.md.
 
 ## Tailwind CSS v4 source scanning
 
