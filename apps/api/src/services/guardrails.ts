@@ -88,6 +88,11 @@ export interface RateDecision {
   allowed: boolean;
   /** Seconds until the caller may retry — present when denied. */
   retryAfterSec?: number;
+  /** Quota reporting for X-RateLimit-* headers (RPE-76): the per-minute
+   * window — limit, requests left in it, and seconds to its reset. */
+  limit?: number;
+  remaining?: number;
+  resetSec?: number;
 }
 
 interface Window {
@@ -118,11 +123,15 @@ export class RateLimiter {
     const ts = this.now();
 
     const minute = this.bump(this.perMinute, key, ts, MINUTE_MS);
+    const resetSec = Math.ceil((minute.windowStart + MINUTE_MS - ts) / 1000);
+    const quota = {
+      limit: this.rpm,
+      remaining: Math.max(0, this.rpm - minute.count),
+      resetSec,
+    };
+
     if (minute.count > this.rpm) {
-      return {
-        allowed: false,
-        retryAfterSec: Math.ceil((minute.windowStart + MINUTE_MS - ts) / 1000),
-      };
+      return { allowed: false, retryAfterSec: resetSec, ...quota };
     }
 
     const day = this.bump(this.perDay, key, ts, DAY_MS);
@@ -130,10 +139,12 @@ export class RateLimiter {
       return {
         allowed: false,
         retryAfterSec: Math.ceil((day.windowStart + DAY_MS - ts) / 1000),
+        ...quota,
+        remaining: 0,
       };
     }
 
-    return { allowed: true };
+    return { allowed: true, ...quota };
   }
 
   private bump(map: Map<string, Window>, key: string, ts: number, windowMs: number): Window {
