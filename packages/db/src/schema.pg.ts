@@ -22,4 +22,12 @@ export const appMeta = pgTable('app_meta', {
     .defaultNow(),
 });
 
-export const pgSchema = { appMeta };
+import { account as authAccountPg, session as authSessionPg, user as authUserPg, verification as authVerificationPg } from './schema.auth.pg.js';
+
+export const pgSchema = {
+  appMeta,
+  user: authUserPg,
+  session: authSessionPg,
+  account: authAccountPg,
+  verification: authVerificationPg,
+};
