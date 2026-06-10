@@ -71,23 +71,50 @@ const MAX_BODY_BYTES = 64 * 1024; // 64 KB
 const VALID_MODES = new Set<string>(['screener', 'proforma']);
 const VALID_PERIODS = new Set<string>(['monthly', 'annual']);
 
-// ── CORS ───────────────────────────────────────────────────────────────────────
+// ── CORS (RPE-81) ──────────────────────────────────────────────────────────────
+//
+// Policy: API keys travel in headers, never cookies, so we NEVER send
+// Access-Control-Allow-Credentials — a credential-less '*' default is
+// safe for the open SPA/dev surface. Operators scoping browser access
+// set RPE_CORS_ORIGINS (comma-separated origins); matching origins are
+// echoed (with Vary: Origin), everything else gets no CORS grant.
+// Server-to-server callers are unaffected either way.
 
-const CORS_HEADERS: Record<string, string> = {
-  'Access-Control-Allow-Origin': '*',
+const CORS_BASE: Record<string, string> = {
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key, X-Request-Id',
   'Access-Control-Max-Age': '86400',
 };
+
+function parseCorsOrigins(raw: string | undefined): string[] | null {
+  if (raw === undefined || raw.trim() === '') return null;
+  const origins = raw.split(',').map((o) => o.trim()).filter((o) => o !== '');
+  return origins.length > 0 ? origins : null;
+}
+
+/** Per-request CORS headers under the configured policy. */
+function corsHeadersFor(
+  requestOrigin: string | undefined,
+  allowlist: string[] | null,
+): Record<string, string> {
+  if (allowlist === null) {
+    return { ...CORS_BASE, 'Access-Control-Allow-Origin': '*' };
+  }
+  if (requestOrigin !== undefined && allowlist.includes(requestOrigin)) {
+    return { ...CORS_BASE, 'Access-Control-Allow-Origin': requestOrigin, Vary: 'Origin' };
+  }
+  return { Vary: 'Origin' }; // no grant for unlisted origins
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function json(res: ServerResponse, status: number, body: unknown): void {
   const payload = JSON.stringify(body);
+  // CORS + security headers are set per-request by the dispatcher via
+  // setHeader; writeHead merges them in
   res.writeHead(status, {
     'Content-Type': 'application/json',
     'Content-Length': Buffer.byteLength(payload),
-    ...CORS_HEADERS,
   });
   res.end(payload);
 }
@@ -105,7 +132,6 @@ function sendRaw(
     'Content-Type': contentType,
     'Content-Length': payload.byteLength,
     ...(disposition !== undefined ? { 'Content-Disposition': disposition } : {}),
-    ...CORS_HEADERS,
   });
   res.end(payload);
 }
@@ -374,6 +400,11 @@ export interface AppConfig {
     rpm?: number;
     dailyCap?: number;
   };
+  /** CORS allowlist (RPE-81). Overrides RPE_CORS_ORIGINS; null/absent =
+   * credential-less '*' (we never send Allow-Credentials). */
+  cors?: {
+    origins?: string[];
+  };
   /** /v1 API key auth (RPE-75). Enforced on the /v1 surface (except
    * /v1/health) whenever the key store is non-empty; legacy unprefixed
    * routes stay open for the SPA. Records via config (tests), the
@@ -451,6 +482,9 @@ export function createApp(config: AppConfig = {}) {
     ),
   };
 
+  const corsAllowlist =
+    config.cors?.origins ?? parseCorsOrigins(process.env['RPE_CORS_ORIGINS']);
+
   const apiKeys = ApiKeyStore.fromEnv(config.auth?.keys);
 
   const v1Limiter = new RateLimiter(
@@ -496,6 +530,15 @@ export function createApp(config: AppConfig = {}) {
     const requestId = resolveRequestId(req);
     res.setHeader('X-Request-Id', requestId);
 
+    // Security + CORS headers on every response (RPE-81)
+    const cors = corsHeadersFor(
+      Array.isArray(req.headers.origin) ? req.headers.origin[0] : req.headers.origin,
+      corsAllowlist,
+    );
+    for (const [name, value] of Object.entries(cors)) res.setHeader(name, value);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+
     const rawPath = normalizePath(req.url?.split('?')[0] ?? '/');
     const isV1 = rawPath === '/v1' || rawPath.startsWith('/v1/');
     const path = isV1 ? normalizePath(rawPath.slice(3)) : rawPath;
@@ -512,9 +555,9 @@ export function createApp(config: AppConfig = {}) {
       });
     });
 
-    // Handle CORS preflight globally before routing
+    // Handle CORS preflight globally before routing (headers already set)
     if (req.method === 'OPTIONS') {
-      res.writeHead(204, CORS_HEADERS);
+      res.writeHead(204);
       res.end();
       return;
     }
@@ -522,6 +565,13 @@ export function createApp(config: AppConfig = {}) {
     // /v1 auth (RPE-75): enforced when keys are configured; /v1/health
     // stays open for load balancers, legacy unprefixed routes stay open
     // for the SPA
+    if (isV1) {
+      res.setHeader(
+        'Cache-Control',
+        path === '/openapi.json' || path === '/docs' ? 'public, max-age=300' : 'no-store',
+      );
+    }
+
     const isV1Open =
       isV1 &&
       req.method === 'GET' &&
