@@ -83,6 +83,9 @@ importers:
       '@rpe/rentcast':
         specifier: workspace:*
         version: link:../../packages/rentcast
+      '@rpe/report':
+        specifier: workspace:*
+        version: link:../../packages/report
     devDependencies:
       '@types/node':
         specifier: ^20.0.0
@@ -198,12 +201,9 @@ importers:
       '@rpe/engine':
         specifier: workspace:*
         version: link:../engine
-<<<<<<< HEAD
-=======
       pdf-lib:
         specifier: ^1.17.1
         version: 1.17.1
->>>>>>> RPE-78
     devDependencies:
       typescript:
         specifier: 'catalog:'
