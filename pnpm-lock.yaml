@@ -193,6 +193,16 @@ importers:
         specifier: 'catalog:'
         version: 5.9.3
 
+  packages/report:
+    dependencies:
+      '@rpe/engine':
+        specifier: workspace:*
+        version: link:../engine
+    devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
   packages/ui:
     dependencies:
       '@rpe/engine':
@@ -204,6 +214,9 @@ importers:
       '@rpe/region-defaults':
         specifier: workspace:*
         version: link:../region-defaults
+      '@rpe/report':
+        specifier: workspace:*
+        version: link:../report
       react:
         specifier: ^18.0.0
         version: 18.3.1
