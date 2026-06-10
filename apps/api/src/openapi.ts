@@ -151,6 +151,13 @@ function errorResponse(description: string) {
 }
 
 /** Build the spec. Pure — version injected so it tracks the package. */
+const DEAL_ID_PARAM = {
+  name: 'id',
+  in: 'path',
+  required: true,
+  schema: { type: 'string', pattern: '^[\\w-]{1,64}$' },
+} as const;
+
 export function buildOpenApiSpec(version: string): Record<string, unknown> {
   return {
     openapi: '3.1.0',
@@ -174,6 +181,17 @@ export function buildOpenApiSpec(version: string): Record<string, unknown> {
         DealInputs: DEAL_INPUTS,
         EvalOptions: EVAL_OPTS,
         DealReport: DEAL_REPORT,
+        StoredDeal: {
+          type: 'object',
+          required: ['id', 'name', 'inputs', 'createdAt', 'updatedAt'],
+          properties: {
+            id: { type: 'string' },
+            name: { type: 'string' },
+            inputs: { $ref: '#/components/schemas/DealInputs' },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+          },
+        },
       },
     },
     paths: {
@@ -231,6 +249,152 @@ export function buildOpenApiSpec(version: string): Record<string, unknown> {
             '401': errorResponse('Missing/invalid/revoked API key.'),
             '413': errorResponse('Payload exceeds 64 KB.'),
             '429': errorResponse('Rate limit exceeded — see Retry-After.'),
+          },
+        },
+      },
+      '/deals': {
+        post: {
+          summary: 'Create a stored deal (RPE-84)',
+          description:
+            'Org-scoped persistence: the organization comes from the API key (DB-backed keys only — ' +
+            'env-allowlist keys get 403). Returns the stored deal with its id.',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['name', 'inputs'],
+                  properties: {
+                    name: { type: 'string', maxLength: 200 },
+                    inputs: { $ref: '#/components/schemas/DealInputs' },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            '201': {
+              description: 'The stored deal.',
+              headers: RATE_LIMIT_HEADERS,
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/StoredDeal' } } },
+            },
+            '400': errorResponse('Invalid name or inputs.'),
+            '401': errorResponse('Missing or invalid API key.'),
+            '403': errorResponse('API key is not attached to an organization.'),
+            '429': errorResponse('Rate limit exceeded.'),
+          },
+        },
+        get: {
+          summary: 'List stored deals (org-scoped, newest-updated first)',
+          parameters: [
+            { name: 'limit', in: 'query', required: false, schema: { type: 'integer', minimum: 1, maximum: 200, default: 50 } },
+            { name: 'offset', in: 'query', required: false, schema: { type: 'integer', minimum: 0, default: 0 } },
+          ],
+          responses: {
+            '200': {
+              description: 'A page of deals plus the org total.',
+              headers: RATE_LIMIT_HEADERS,
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    required: ['deals', 'total'],
+                    properties: {
+                      deals: { type: 'array', items: { $ref: '#/components/schemas/StoredDeal' } },
+                      total: { type: 'integer' },
+                    },
+                  },
+                },
+              },
+            },
+            '401': errorResponse('Missing or invalid API key.'),
+            '403': errorResponse('API key is not attached to an organization.'),
+            '429': errorResponse('Rate limit exceeded.'),
+          },
+        },
+      },
+      '/deals/{id}': {
+        get: {
+          summary: 'Fetch a stored deal',
+          parameters: [DEAL_ID_PARAM],
+          responses: {
+            '200': {
+              description: 'The deal.',
+              headers: RATE_LIMIT_HEADERS,
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/StoredDeal' } } },
+            },
+            '404': errorResponse('Deal not found (uniform across tenants — existence never leaks).'),
+            '401': errorResponse('Missing or invalid API key.'),
+            '429': errorResponse('Rate limit exceeded.'),
+          },
+        },
+        patch: {
+          summary: 'Update a stored deal (name and/or inputs)',
+          parameters: [DEAL_ID_PARAM],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    name: { type: 'string', maxLength: 200 },
+                    inputs: { $ref: '#/components/schemas/DealInputs' },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            '200': {
+              description: 'The updated deal (updatedAt bumped; report cache key rotates).',
+              headers: RATE_LIMIT_HEADERS,
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/StoredDeal' } } },
+            },
+            '400': errorResponse('Invalid name or inputs.'),
+            '404': errorResponse('Deal not found.'),
+            '401': errorResponse('Missing or invalid API key.'),
+            '429': errorResponse('Rate limit exceeded.'),
+          },
+        },
+        delete: {
+          summary: 'Delete a stored deal',
+          parameters: [DEAL_ID_PARAM],
+          responses: {
+            '204': { description: 'Deleted.' },
+            '404': errorResponse('Deal not found.'),
+            '401': errorResponse('Missing or invalid API key.'),
+            '429': errorResponse('Rate limit exceeded.'),
+          },
+        },
+      },
+      '/deals/{id}/report': {
+        get: {
+          summary: 'Generate a report for a stored deal (cached)',
+          description:
+            'Same format negotiation as /v1/reports (`?format=` > Accept > json). Responses are cached by ' +
+            'deal + format + engine version + updatedAt — updating the deal invalidates structurally. ' +
+            'X-Report-Cache: hit|miss. Generation is synchronous (pdf-lib is fast); no async 202 pattern.',
+          parameters: [
+            DEAL_ID_PARAM,
+            { name: 'format', in: 'query', required: false, schema: { type: 'string', enum: ['json', 'csv', 'pdf'] } },
+          ],
+          responses: {
+            '200': {
+              description: 'The report in the negotiated format.',
+              headers: RATE_LIMIT_HEADERS,
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/DealReport' } },
+                'text/csv': { schema: { type: 'string' } },
+                'application/pdf': { schema: { type: 'string', format: 'binary' } },
+              },
+            },
+            '404': errorResponse('Deal not found.'),
+            '406': errorResponse('Unsupported report format.'),
+            '422': errorResponse('Stored inputs no longer validate.'),
+            '401': errorResponse('Missing or invalid API key.'),
+            '429': errorResponse('Rate limit exceeded.'),
           },
         },
       },
