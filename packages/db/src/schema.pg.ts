@@ -11,7 +11,7 @@
  * stories (RPE-89+, better-auth-generated per ADR 0001).
  */
 
-import { pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import { jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
 
 /** Key/value app metadata — the migration smoke table. */
 export const appMeta = pgTable('app_meta', {
@@ -20,6 +20,34 @@ export const appMeta = pgTable('app_meta', {
   updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' })
     .notNull()
     .defaultNow(),
+});
+
+/**
+ * E10 Phase 2 (RPE-83) — org-scoped stored deals. `inputs` is the
+ * engine's DealInputs as JSON; the engine stays the single source of
+ * shape truth, so the DB column is schemaless on purpose.
+ */
+export const deal = pgTable('deal', {
+  id: text('id').primaryKey(),
+  organizationId: text('organization_id').notNull(),
+  name: text('name').notNull(),
+  inputs: jsonb('inputs').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+});
+
+/**
+ * RPE-83 — DB-backed API keys (RPE-75 model: sha256 hash at rest),
+ * attached to an organization per the one-identity-layer decision.
+ */
+export const apiKey = pgTable('api_key', {
+  id: text('id').primaryKey(),
+  organizationId: text('organization_id').notNull(),
+  label: text('label').notNull(),
+  hash: text('hash').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  revokedAt: timestamp('revoked_at', { withTimezone: true, mode: 'date' }),
+  lastUsedAt: timestamp('last_used_at', { withTimezone: true, mode: 'date' }),
 });
 
 import { account as authAccountPg, invitation as authInvitationPg, member as authMemberPg, organization as authOrganizationPg, session as authSessionPg, user as authUserPg, verification as authVerificationPg } from './schema.auth.pg.js';
@@ -33,4 +61,6 @@ export const pgSchema = {
   organization: authOrganizationPg,
   member: authMemberPg,
   invitation: authInvitationPg,
+  deal,
+  apiKey,
 };
