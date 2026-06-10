@@ -16,10 +16,21 @@
  * exhaust memory (same defense as RateLimiter.prune).
  */
 
-const WINDOW_MS = 15 * 60 * 1000;
-const THRESHOLD = 5;
-const BASE_LOCKOUT_MS = 60 * 1000;
-const MAX_LOCKOUT_MS = 60 * 60 * 1000;
+export interface ThrottlePolicy {
+  windowMs: number;
+  threshold: number;
+  baseLockoutMs: number;
+  maxLockoutMs: number;
+}
+
+/** RPE-91 sign-in default: 5 failures/15 min → 1 min, doubling to 1 h. */
+const DEFAULT_POLICY: ThrottlePolicy = {
+  windowMs: 15 * 60 * 1000,
+  threshold: 5,
+  baseLockoutMs: 60 * 1000,
+  maxLockoutMs: 60 * 60 * 1000,
+};
+
 const MAX_KEYS = 10_000;
 
 interface FailureState {
@@ -35,8 +46,14 @@ export interface ThrottleDecision {
 
 export class LoginThrottle {
   private readonly states = new Map<string, FailureState>();
+  private readonly policy: ThrottlePolicy;
 
-  constructor(private readonly now: () => number = Date.now) {}
+  constructor(
+    private readonly now: () => number = Date.now,
+    policy: Partial<ThrottlePolicy> = {},
+  ) {
+    this.policy = { ...DEFAULT_POLICY, ...policy };
+  }
 
   /** Check both identity keys — deny if either is locked out. */
   check(email: string, ip: string): ThrottleDecision {
@@ -57,16 +74,17 @@ export class LoginThrottle {
     const ts = this.now();
     for (const key of this.keys(email, ip)) {
       let state = this.states.get(key);
-      if (state === undefined || ts - state.windowStart >= WINDOW_MS) {
+      if (state === undefined || ts - state.windowStart >= this.policy.windowMs) {
         if (this.states.size >= MAX_KEYS) this.prune(ts);
         state = { windowStart: ts, failures: 0, lockedUntil: 0 };
         this.states.set(key, state);
       }
       state.failures += 1;
-      if (state.failures >= THRESHOLD) {
-        // Progressive: 1 min at the threshold, doubling per extra failure
-        const escalations = state.failures - THRESHOLD;
-        state.lockedUntil = ts + Math.min(BASE_LOCKOUT_MS * 2 ** escalations, MAX_LOCKOUT_MS);
+      if (state.failures >= this.policy.threshold) {
+        // Progressive: base lockout at the threshold, doubling per extra failure
+        const escalations = state.failures - this.policy.threshold;
+        state.lockedUntil =
+          ts + Math.min(this.policy.baseLockoutMs * 2 ** escalations, this.policy.maxLockoutMs);
       }
     }
   }
@@ -82,7 +100,7 @@ export class LoginThrottle {
 
   private prune(ts: number): void {
     for (const [key, state] of this.states) {
-      if (ts - state.windowStart >= WINDOW_MS && state.lockedUntil <= ts) this.states.delete(key);
+      if (ts - state.windowStart >= this.policy.windowMs && state.lockedUntil <= ts) this.states.delete(key);
     }
     while (this.states.size >= MAX_KEYS) {
       const oldest = this.states.keys().next().value;

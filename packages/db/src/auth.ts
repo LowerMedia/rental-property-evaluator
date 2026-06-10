@@ -48,9 +48,21 @@ export interface CreateAuthOptions {
   /** Login brute-force throttle (RPE-91). Defaults to a fresh
    * LoginThrottle; inject for deterministic tests. */
   loginThrottle?: LoginThrottle;
+  /** Reset-request spam throttle (RPE-92) — same mechanism, request-count
+   * policy (every request counts; responses are always neutral). */
+  resetRequestThrottle?: LoginThrottle;
 }
 
 const SIGN_IN_PATH = '/sign-in/email';
+const RESET_REQUEST_PATH = '/request-password-reset';
+
+/** RPE-92: 3 reset requests/15 min per email/IP, then 15 min lockout. */
+const RESET_REQUEST_POLICY = {
+  windowMs: 15 * 60 * 1000,
+  threshold: 3,
+  baseLockoutMs: 15 * 60 * 1000,
+  maxLockoutMs: 60 * 60 * 1000,
+};
 
 function requestIp(headers: Headers | undefined): string {
   // Prefer the dispatcher-resolved IP (RPE-76 trust boundary, includes
@@ -64,6 +76,7 @@ function requestIp(headers: Headers | undefined): string {
 
 export function createAuth(options: CreateAuthOptions) {
   const throttle = options.loginThrottle ?? new LoginThrottle();
+  const resetThrottle = options.resetRequestThrottle ?? new LoginThrottle(Date.now, RESET_REQUEST_POLICY);
   const database =
     options.db.dialect === 'postgres'
       ? drizzleAdapter(options.db.pg, { provider: 'pg' })
@@ -88,6 +101,8 @@ export function createAuth(options: CreateAuthOptions) {
             },
           }
         : {}),
+      // RPE-92: a successful reset kills every active session for the user
+      revokeSessionsOnPasswordReset: true,
     },
     ...(options.sendVerificationEmail !== undefined
       ? {
@@ -110,13 +125,25 @@ export function createAuth(options: CreateAuthOptions) {
       // layer sees the parsed body, so lockout keys on the submitted
       // email AND the client IP, with progressive backoff
       before: createAuthMiddleware(async (ctx) => {
-        if (ctx.path !== SIGN_IN_PATH) return;
         const email = typeof ctx.body?.email === 'string' ? ctx.body.email : '';
-        const decision = throttle.check(email, requestIp(ctx.request?.headers));
-        if (!decision.allowed) {
-          throw new APIError('TOO_MANY_REQUESTS', {
-            message: `Too many sign-in attempts. Try again in ${decision.retryAfterSec ?? 60}s.`,
-          });
+        const ip = requestIp(ctx.request?.headers);
+        if (ctx.path === SIGN_IN_PATH) {
+          const decision = throttle.check(email, ip);
+          if (!decision.allowed) {
+            throw new APIError('TOO_MANY_REQUESTS', {
+              message: `Too many sign-in attempts. Try again in ${decision.retryAfterSec ?? 60}s.`,
+            });
+          }
+        } else if (ctx.path === RESET_REQUEST_PATH) {
+          const decision = resetThrottle.check(email, ip);
+          if (!decision.allowed) {
+            throw new APIError('TOO_MANY_REQUESTS', {
+              message: `Too many reset requests. Try again in ${decision.retryAfterSec ?? 60}s.`,
+            });
+          }
+          // Every request counts — the response is always neutral, so
+          // there is no failure signal to key on
+          resetThrottle.onFailure(email, ip);
         }
       }),
       after: createAuthMiddleware(async (ctx) => {
