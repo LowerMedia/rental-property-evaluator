@@ -27,6 +27,9 @@ const ARGON2ID_PARAMS = {
   parallelism: 1,
 } as const;
 
+/** Mailer-agnostic send hook — apps/api binds these to its Mailer (RPE-95). */
+export type SendEmailHook = (data: { email: string; url: string }) => Promise<void>;
+
 export interface CreateAuthOptions {
   db: RpeDb;
   /** BETTER_AUTH_SECRET — ≥32 chars, env-provided, never committed. */
@@ -35,6 +38,11 @@ export interface CreateAuthOptions {
   baseURL: string;
   /** Browser origins allowed to drive cookie-auth flows (CSRF origin check). */
   trustedOrigins?: string[];
+  /** Email-verification send hook (+ optional send-on-sign-up, RPE-90 flips it). */
+  sendVerificationEmail?: SendEmailHook;
+  sendVerificationOnSignUp?: boolean;
+  /** Password-reset send hook (RPE-92 consumes). */
+  sendResetPassword?: SendEmailHook;
 }
 
 export function createAuth(options: CreateAuthOptions) {
@@ -55,7 +63,24 @@ export function createAuth(options: CreateAuthOptions) {
         hash: (password) => hash(password, ARGON2ID_PARAMS),
         verify: ({ hash: stored, password }) => verify(stored, password),
       },
+      ...(options.sendResetPassword !== undefined
+        ? {
+            sendResetPassword: async ({ user, url }) => {
+              await options.sendResetPassword!({ email: user.email, url });
+            },
+          }
+        : {}),
     },
+    ...(options.sendVerificationEmail !== undefined
+      ? {
+          emailVerification: {
+            sendOnSignUp: options.sendVerificationOnSignUp ?? false,
+            sendVerificationEmail: async ({ user, url }) => {
+              await options.sendVerificationEmail!({ email: user.email, url });
+            },
+          },
+        }
+      : {}),
     advanced: {
       // better-auth SKIPS the CSRF origin check by default when
       // NODE_ENV=test — pin it on so tests exercise exactly what
