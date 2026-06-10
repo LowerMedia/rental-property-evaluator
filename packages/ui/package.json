@@ -15,7 +15,8 @@
   "dependencies": {
     "@rpe/engine": "workspace:*",
     "@rpe/property": "workspace:*",
-    "@rpe/region-defaults": "workspace:*"
+    "@rpe/region-defaults": "workspace:*",
+    "@rpe/report": "workspace:*"
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.2",

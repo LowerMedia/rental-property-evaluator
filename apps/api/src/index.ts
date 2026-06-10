@@ -51,8 +51,12 @@ import {
   type ContextSuccessBody,
 } from './routes/propertyContext.js';
 import { handleRegion } from './routes/region.js';
+import { handleReports, type ValidatedEvalBody } from './routes/reports.js';
+import { buildOpenApiSpec, docsHtml } from './openapi.js';
 import { handleScrape, type ScrapeDeps, type ScrapeSuccessBody } from './routes/scrape.js';
-import { RateLimiter, TtlCache } from './services/guardrails.js';
+import { RateLimiter, TtlCache, clientIp } from './services/guardrails.js';
+import { Router, logRequest, normalizePath, resolveRequestId, v1Error } from './router.js';
+import { ApiKeyStore, extractApiKey, type ApiKeyRecord } from './services/apiKeys.js';
 
 // Hoist __filename/__dirname for use in VERSION and the entry-point guard below.
 const __filename = fileURLToPath(import.meta.url);
@@ -67,23 +71,67 @@ const MAX_BODY_BYTES = 64 * 1024; // 64 KB
 const VALID_MODES = new Set<string>(['screener', 'proforma']);
 const VALID_PERIODS = new Set<string>(['monthly', 'annual']);
 
-// ── CORS ───────────────────────────────────────────────────────────────────────
+// ── CORS (RPE-81) ──────────────────────────────────────────────────────────────
+//
+// Policy: API keys travel in headers, never cookies, so we NEVER send
+// Access-Control-Allow-Credentials — a credential-less '*' default is
+// safe for the open SPA/dev surface. Operators scoping browser access
+// set RPE_CORS_ORIGINS (comma-separated origins); matching origins are
+// echoed (with Vary: Origin), everything else gets no CORS grant.
+// Server-to-server callers are unaffected either way.
 
-const CORS_HEADERS: Record<string, string> = {
-  'Access-Control-Allow-Origin': '*',
+const CORS_BASE: Record<string, string> = {
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key, X-Request-Id',
   'Access-Control-Max-Age': '86400',
 };
+
+function parseCorsOrigins(raw: string | undefined): string[] | null {
+  if (raw === undefined || raw.trim() === '') return null;
+  const origins = raw.split(',').map((o) => o.trim()).filter((o) => o !== '');
+  return origins.length > 0 ? origins : null;
+}
+
+/** Per-request CORS headers under the configured policy. */
+function corsHeadersFor(
+  requestOrigin: string | undefined,
+  allowlist: string[] | null,
+): Record<string, string> {
+  if (allowlist === null) {
+    return { ...CORS_BASE, 'Access-Control-Allow-Origin': '*' };
+  }
+  if (requestOrigin !== undefined && allowlist.includes(requestOrigin)) {
+    return { ...CORS_BASE, 'Access-Control-Allow-Origin': requestOrigin, Vary: 'Origin' };
+  }
+  return { Vary: 'Origin' }; // no grant for unlisted origins
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function json(res: ServerResponse, status: number, body: unknown): void {
   const payload = JSON.stringify(body);
+  // CORS + security headers are set per-request by the dispatcher via
+  // setHeader; writeHead merges them in
   res.writeHead(status, {
     'Content-Type': 'application/json',
     'Content-Length': Buffer.byteLength(payload),
-    ...CORS_HEADERS,
+  });
+  res.end(payload);
+}
+
+/** Raw (non-JSON) response writer for downloads — CORS included (RPE-79). */
+function sendRaw(
+  res: ServerResponse,
+  status: number,
+  contentType: string,
+  body: Uint8Array | string,
+  disposition?: string,
+): void {
+  const payload = typeof body === 'string' ? Buffer.from(body, 'utf8') : Buffer.from(body);
+  res.writeHead(status, {
+    'Content-Type': contentType,
+    'Content-Length': payload.byteLength,
+    ...(disposition !== undefined ? { 'Content-Disposition': disposition } : {}),
   });
   res.end(payload);
 }
@@ -184,6 +232,114 @@ function handleHealth(req: IncomingMessage, res: ServerResponse): void {
   json(res, 200, { status: 'ok', version: VERSION });
 }
 
+/**
+ * Validate an evaluate/report request body (RPE-79 — shared by
+ * handleEvaluate and POST /v1/reports so the contract can't drift).
+ * Messages preserved verbatim from the original inline validation.
+ */
+export function validateEvaluateBody(parsed: unknown): ValidatedEvalBody {
+  const parsedObj = parsed as Record<string, unknown>;
+  if (
+    typeof parsed !== 'object' ||
+    parsed === null ||
+    !Object.hasOwn(parsedObj, 'inputs') ||
+    typeof parsedObj['inputs'] !== 'object' ||
+    parsedObj['inputs'] === null
+  ) {
+    return {
+      ok: false,
+      message: 'Request body must be { inputs: DealInputs, opts?: { mode: "screener" | "proforma" } }',
+    };
+  }
+
+  // Guard: opts, if present, must be a plain object — not a string, number, null, or array.
+  // Own-property check prevents prototype-chain values from satisfying the presence guard.
+  const rawOpts = Object.hasOwn(parsedObj, 'opts') ? parsedObj['opts'] : undefined;
+  if (
+    rawOpts !== undefined &&
+    (typeof rawOpts !== 'object' || rawOpts === null || Array.isArray(rawOpts))
+  ) {
+    return { ok: false, message: 'opts must be an object, e.g. { "mode": "screener" }' };
+  }
+
+  const { inputs, opts } = parsed as { inputs: DealInputs; opts?: EvalOptions };
+
+  if (opts?.mode !== undefined && !VALID_MODES.has(opts.mode)) {
+    return { ok: false, message: `opts.mode must be "screener" or "proforma", got "${opts.mode}"` };
+  }
+
+  // Validate required top-level fields — both presence AND type.
+  // Engine normalises absent/null numerics to 0 and non-boolean rollClosingCostsIntoLoan
+  // via Boolean() to false, both producing misleading results without a prior 400.
+  const REQUIRED_NUMERIC = [
+    'purchasePrice', 'percentDown', 'interestRate', 'loanTermYears',
+    'closingCosts', 'grossRent', 'vacancyPct',
+  ] as const;
+  const REQUIRED_BOOLEAN = ['rollClosingCostsIntoLoan'] as const;
+  const rawInputs = inputs as unknown as Record<string, unknown>;
+
+  const invalidFields: string[] = [
+    ...REQUIRED_NUMERIC.filter(
+      (k) =>
+        !Object.hasOwn(rawInputs, k) ||
+        typeof rawInputs[k] !== 'number' ||
+        !Number.isFinite(rawInputs[k] as number),
+    ),
+    ...REQUIRED_BOOLEAN.filter(
+      (k) => !Object.hasOwn(rawInputs, k) || typeof rawInputs[k] !== 'boolean',
+    ),
+  ];
+  if (invalidFields.length > 0) {
+    return { ok: false, message: `Invalid or missing required input fields: ${invalidFields.join(', ')}` };
+  }
+
+  // Guard: expenses must be a plain object — not null, not array.
+  const expField = Object.hasOwn(rawInputs, 'expenses') ? rawInputs['expenses'] : undefined;
+  if (typeof expField !== 'object' || expField === null || Array.isArray(expField)) {
+    return {
+      ok: false,
+      message:
+        'inputs.expenses must be an object including taxes and insurance, each { amount: number, period: "monthly" | "annual" }',
+    };
+  }
+  const expObj = expField as Record<string, unknown>;
+
+  if (!Object.hasOwn(expObj, 'taxes') || !Object.hasOwn(expObj, 'insurance')) {
+    return {
+      ok: false,
+      message:
+        'inputs.expenses must include taxes and insurance, each { amount: number, period: "monthly" | "annual" }',
+    };
+  }
+
+  const EXPENSE_ITEM_KEYS = new Set(['taxes', 'insurance', 'hoa', 'other']);
+  const EXPENSE_PCT_KEYS = new Set(['capExPct', 'maintPct', 'mgmtPct', 'miscPct']);
+
+  const invalidItemKeys = Object.keys(expObj).filter(
+    (k) => EXPENSE_ITEM_KEYS.has(k) && !isValidExpenseItem(expObj[k]),
+  );
+  if (invalidItemKeys.length > 0) {
+    const qualifiedItemKeys = invalidItemKeys.map((k) => `inputs.expenses.${k}`).join(', ');
+    return { ok: false, message: `${qualifiedItemKeys} must each be { amount: number, period: "monthly" | "annual" }` };
+  }
+
+  const invalidPctKeys = Object.keys(expObj).filter(
+    (k) =>
+      EXPENSE_PCT_KEYS.has(k) &&
+      (typeof expObj[k] !== 'number' || !Number.isFinite(expObj[k] as number)),
+  );
+  if (invalidPctKeys.length > 0) {
+    const qualifiedPctKeys = invalidPctKeys.map((k) => `inputs.expenses.${k}`).join(', ');
+    return { ok: false, message: `${qualifiedPctKeys} must each be a finite number` };
+  }
+
+  const format = Object.hasOwn(parsedObj, 'format') && typeof parsedObj['format'] === 'string'
+    ? parsedObj['format']
+    : null;
+
+  return { ok: true, inputs, opts, format };
+}
+
 async function handleEvaluate(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method !== 'POST') {
     json(res, 405, { error: 'Method not allowed — use POST' });
@@ -208,128 +364,14 @@ async function handleEvaluate(req: IncomingMessage, res: ServerResponse): Promis
     return;
   }
 
-  const parsedObj = parsed as Record<string, unknown>;
-  if (
-    typeof parsed !== 'object' ||
-    parsed === null ||
-    !Object.hasOwn(parsedObj, 'inputs') ||
-    typeof parsedObj['inputs'] !== 'object' ||
-    parsedObj['inputs'] === null
-  ) {
-    json(res, 400, {
-      error:
-        'Request body must be { inputs: DealInputs, opts?: { mode: "screener" | "proforma" } }',
-    });
-    return;
-  }
-
-  // Guard: opts, if present, must be a plain object — not a string, number, null, or array.
-  // Without this check, `opts: "screener"` or `opts: null` would silently pass through
-  // the mode validation and reach evaluate() with the wrong shape.
-  // Own-property check prevents prototype-chain values from satisfying the presence guard.
-  const rawOpts = Object.hasOwn(parsedObj, 'opts') ? parsedObj['opts'] : undefined;
-  if (
-    rawOpts !== undefined &&
-    (typeof rawOpts !== 'object' || rawOpts === null || Array.isArray(rawOpts))
-  ) {
-    json(res, 400, { error: 'opts must be an object, e.g. { "mode": "screener" }' });
-    return;
-  }
-
-  const { inputs, opts } = parsed as { inputs: DealInputs; opts?: EvalOptions };
-
-  if (opts?.mode !== undefined && !VALID_MODES.has(opts.mode)) {
-    json(res, 400, {
-      error: `opts.mode must be "screener" or "proforma", got "${opts.mode}"`,
-    });
-    return;
-  }
-
-  // Validate required top-level fields — both presence AND type.
-  // Engine normalises absent/null numerics to 0 and non-boolean rollClosingCostsIntoLoan
-  // via Boolean() to false, both producing misleading results without a prior 400.
-  // Non-finite numbers (Infinity, NaN) are also rejected — consistent with isValidExpenseItem.
-  const REQUIRED_NUMERIC = [
-    'purchasePrice', 'percentDown', 'interestRate', 'loanTermYears',
-    'closingCosts', 'grossRent', 'vacancyPct',
-  ] as const;
-  const REQUIRED_BOOLEAN = ['rollClosingCostsIntoLoan'] as const;
-  const rawInputs = inputs as unknown as Record<string, unknown>;
-
-  const invalidFields: string[] = [
-    ...REQUIRED_NUMERIC.filter(
-      (k) =>
-        !Object.hasOwn(rawInputs, k) ||
-        typeof rawInputs[k] !== 'number' ||
-        !Number.isFinite(rawInputs[k] as number),
-    ),
-    ...REQUIRED_BOOLEAN.filter(
-      (k) => !Object.hasOwn(rawInputs, k) || typeof rawInputs[k] !== 'boolean',
-    ),
-  ];
-  if (invalidFields.length > 0) {
-    json(res, 400, {
-      error: `Invalid or missing required input fields: ${invalidFields.join(', ')}`,
-    });
-    return;
-  }
-
-  // Guard: expenses must be a plain object — not null, not array.
-  const expField = Object.hasOwn(rawInputs, 'expenses') ? rawInputs['expenses'] : undefined;
-  if (typeof expField !== 'object' || expField === null || Array.isArray(expField)) {
-    json(res, 400, {
-      error:
-        'inputs.expenses must be an object including taxes and insurance, each { amount: number, period: "monthly" | "annual" }',
-    });
-    return;
-  }
-  const expObj = expField as Record<string, unknown>;
-
-  // taxes and insurance are required ExpenseInput fields.
-  if (!Object.hasOwn(expObj, 'taxes') || !Object.hasOwn(expObj, 'insurance')) {
-    json(res, 400, {
-      error:
-        'inputs.expenses must include taxes and insurance, each { amount: number, period: "monthly" | "annual" }',
-    });
-    return;
-  }
-
-  // DealExpenses has two field categories — validate each appropriately:
-  //   ExpenseInput fields (taxes, insurance, hoa, other): { amount: number, period: "monthly"|"annual" }
-  //   Numeric % fields (capExPct, maintPct, mgmtPct, miscPct): finite number
-  // Keys outside these two sets are not validated and are silently ignored by the engine
-  // (normalizeExpenses() only maps known fields).
-  const EXPENSE_ITEM_KEYS = new Set(['taxes', 'insurance', 'hoa', 'other']);
-  const EXPENSE_PCT_KEYS = new Set(['capExPct', 'maintPct', 'mgmtPct', 'miscPct']);
-
-  const invalidItemKeys = Object.keys(expObj).filter(
-    (k) => EXPENSE_ITEM_KEYS.has(k) && !isValidExpenseItem(expObj[k]),
-  );
-  if (invalidItemKeys.length > 0) {
-    // Fully-qualify each key so the message is unambiguous (no "inputs.expenses.taxes, hoa" dotted-path confusion).
-    const qualifiedItemKeys = invalidItemKeys.map((k) => `inputs.expenses.${k}`).join(', ');
-    json(res, 400, {
-      error: `${qualifiedItemKeys} must each be { amount: number, period: "monthly" | "annual" }`,
-    });
-    return;
-  }
-
-  const invalidPctKeys = Object.keys(expObj).filter(
-    (k) =>
-      EXPENSE_PCT_KEYS.has(k) &&
-      (typeof expObj[k] !== 'number' || !Number.isFinite(expObj[k] as number)),
-  );
-  if (invalidPctKeys.length > 0) {
-    // Fully-qualify each key so the message is unambiguous.
-    const qualifiedPctKeys = invalidPctKeys.map((k) => `inputs.expenses.${k}`).join(', ');
-    json(res, 400, {
-      error: `${qualifiedPctKeys} must each be a finite number`,
-    });
+  const validated = validateEvaluateBody(parsed);
+  if (!validated.ok) {
+    json(res, 400, { error: validated.message });
     return;
   }
 
   try {
-    const results = evaluate(inputs, opts);
+    const results = evaluate(validated.inputs, validated.opts);
     json(res, 200, { results });
   } catch (err) {
     // Log full details server-side; return a generic message to clients.
@@ -355,6 +397,26 @@ export interface AppConfig {
   /** /geocode guardrails (RPE-46). Env: RPE_GEOCODE_RPM (default 60),
    * RPE_GEOCODE_DAILY_CAP (default 1000); cache shares the property TTL knob. */
   geocode?: {
+    rpm?: number;
+    dailyCap?: number;
+  };
+  /** CORS allowlist (RPE-81). Overrides RPE_CORS_ORIGINS; null/absent =
+   * credential-less '*' (we never send Allow-Credentials). */
+  cors?: {
+    origins?: string[];
+  };
+  /** /v1 API key auth (RPE-75). Enforced on the /v1 surface (except
+   * /v1/health) whenever the key store is non-empty; legacy unprefixed
+   * routes stay open for the SPA. Records via config (tests), the
+   * RPE_API_KEYS env JSON, or RPE_API_KEYS_FILE. */
+  auth?: {
+    keys?: ApiKeyRecord[];
+  };
+  /** /v1 public-surface throttle (RPE-76) — keyed by api key id, per-IP
+   * for unauthenticated paths. In-memory fixed windows: a shared store
+   * (e.g. Redis) is required before horizontal scaling. Env:
+   * RPE_V1_RPM (default 120), RPE_V1_DAILY_CAP (default 10000). */
+  v1RateLimit?: {
     rpm?: number;
     dailyCap?: number;
   };
@@ -420,45 +482,169 @@ export function createApp(config: AppConfig = {}) {
     ),
   };
 
-  return createServer((req: IncomingMessage, res: ServerResponse) => {
-    const url = req.url?.split('?')[0] ?? '/';
+  const corsAllowlist =
+    config.cors?.origins ?? parseCorsOrigins(process.env['RPE_CORS_ORIGINS']);
 
-    // Handle CORS preflight globally before routing
+  const apiKeys = ApiKeyStore.fromEnv(config.auth?.keys);
+
+  const v1Limiter = new RateLimiter(
+    config.v1RateLimit?.rpm ?? envInt('RPE_V1_RPM', 120),
+    config.v1RateLimit?.dailyCap ?? envInt('RPE_V1_DAILY_CAP', 10000),
+  );
+
+  // Handler-emitted error bodies carry the request id too (RPE-74) —
+  // the dispatcher sets X-Request-Id on the response before dispatch, so
+  // the wrapper recovers it without per-request closures
+  const jsonWithRequestId: typeof json = (rs, status, body) => {
+    const rid = String(rs.getHeader('X-Request-Id') ?? '');
+    if (status >= 400 && body !== null && typeof body === 'object' && !Array.isArray(body) && rid !== '') {
+      json(rs, status, { ...(body as Record<string, unknown>), requestId: rid });
+      return;
+    }
+    json(rs, status, body);
+  };
+
+  // ── Routes (RPE-74) — registered once; /v1 aliases resolve by prefix-strip
+  const router = new Router()
+    .on('GET', '/health', (rq, rs) => handleHealth(rq, rs))
+    .on('POST', '/evaluate', (rq, rs) => handleEvaluate(rq, rs))
+    .on('POST', '/property/context', (rq, rs) => handlePropertyContext(rq, rs, jsonWithRequestId, readBody, propertyContextDeps))
+    .on('POST', '/property', (rq, rs) => handleProperty(rq, rs, jsonWithRequestId, readBody, propertyDeps))
+    .on('GET', '/region', (rq, rs) => handleRegion(rq, rs, jsonWithRequestId))
+    .on('GET', '/geocode', (rq, rs) => handleGeocode(rq, rs, jsonWithRequestId, geocodeDeps))
+    .on('POST', '/scrape', (rq, rs) => handleScrape(rq, rs, jsonWithRequestId, readBody, scrapeDeps));
+
+  // /v1-native routes (RPE-79) — never exposed on the legacy unprefixed surface
+  const v1Router = new Router()
+    .on('GET', '/openapi.json', (rq, rs) => json(rs, 200, buildOpenApiSpec(VERSION)))
+    .on('GET', '/docs', (rq, rs) => sendRaw(rs, 200, 'text/html; charset=utf-8', docsHtml()))
+    .on('POST', '/reports', (rq, rs) =>
+      handleReports(rq, rs, jsonWithRequestId, readBody, {
+        validate: validateEvaluateBody,
+        engineVersion: VERSION,
+        sendRaw,
+      }));
+
+  return createServer((req: IncomingMessage, res: ServerResponse) => {
+    const startedAt = Date.now();
+    const requestId = resolveRequestId(req);
+    res.setHeader('X-Request-Id', requestId);
+
+    // Security + CORS headers on every response (RPE-81)
+    const cors = corsHeadersFor(
+      Array.isArray(req.headers.origin) ? req.headers.origin[0] : req.headers.origin,
+      corsAllowlist,
+    );
+    for (const [name, value] of Object.entries(cors)) res.setHeader(name, value);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+
+    const rawPath = normalizePath(req.url?.split('?')[0] ?? '/');
+    const isV1 = rawPath === '/v1' || rawPath.startsWith('/v1/');
+    const path = isV1 ? normalizePath(rawPath.slice(3)) : rawPath;
+    let apiKeyId: string | null = null;
+
+    res.on('finish', () => {
+      logRequest({
+        method: req.method ?? 'GET',
+        path: rawPath,
+        status: res.statusCode,
+        latencyMs: Date.now() - startedAt,
+        requestId,
+        ...(apiKeyId !== null ? { apiKeyId } : {}),
+      });
+    });
+
+    // Handle CORS preflight globally before routing (headers already set)
     if (req.method === 'OPTIONS') {
-      res.writeHead(204, CORS_HEADERS);
+      res.writeHead(204);
       res.end();
       return;
     }
 
-    if (url === '/health' || url === '/health/') {
-      handleHealth(req, res);
+    // /v1 auth (RPE-75): enforced when keys are configured; /v1/health
+    // stays open for load balancers, legacy unprefixed routes stay open
+    // for the SPA
+    if (isV1) {
+      res.setHeader(
+        'Cache-Control',
+        path === '/openapi.json' || path === '/docs' ? 'public, max-age=300' : 'no-store',
+      );
+    }
+
+    const isV1Open =
+      isV1 &&
+      req.method === 'GET' &&
+      (path === '/health' || path === '/openapi.json' || path === '/docs');
+    const isV1Health = isV1 && path === '/health' && req.method === 'GET';
+    if (isV1 && apiKeys.size > 0) {
+      const presented = extractApiKey(req.headers);
+      const record = presented !== null ? apiKeys.verify(presented) : null;
+      if (record !== null) {
+        apiKeyId = record.id;
+      } else if (!isV1Open) {
+        // health/docs identify but never reject (load balancers and browsers don't auth);
+        // everything else on /v1 requires a valid key
+        json(res, 401, v1Error(
+          'unauthorized',
+          'A valid API key is required — send Authorization: Bearer <key> or X-API-Key.',
+          requestId,
+        ));
+        return;
+      }
+    }
+
+    // /v1 throttle (RPE-76): keyed by api key identity, per-IP fallback
+    // for unauthenticated paths (health, zero-config dev). Quota headers
+    // on every /v1 response.
+    if (isV1) {
+      const decision = v1Limiter.check(apiKeyId ?? `ip:${clientIp(req)}`);
+      if (decision.limit !== undefined) res.setHeader('X-RateLimit-Limit', String(decision.limit));
+      if (decision.remaining !== undefined) res.setHeader('X-RateLimit-Remaining', String(decision.remaining));
+      if (decision.resetSec !== undefined) res.setHeader('X-RateLimit-Reset', String(decision.resetSec));
+      if (!decision.allowed) {
+        res.setHeader('Retry-After', String(decision.retryAfterSec ?? 60));
+        json(res, 429, v1Error(
+          'rate_limited',
+          'Rate limit exceeded — slow down and retry after the indicated interval.',
+          requestId,
+        ));
+        return;
+      }
+    }
+
+    // /v1-native: versioned health with API metadata
+    if (isV1Health) {
+      json(res, 200, {
+        status: 'ok',
+        version: VERSION,
+        apiVersion: 'v1',
+        gitSha: process.env['GIT_SHA'] ?? null,
+      });
       return;
     }
 
-    // Route to async handlers; catch unhandled rejections so every request
-    // gets a response (createServer does not propagate Promise rejections).
-    const asyncHandler =
-      url === '/evaluate' || url === '/evaluate/'
-        ? () => handleEvaluate(req, res)
-        : url === '/property/context' || url === '/property/context/'
-        ? () => handlePropertyContext(req, res, json, readBody, propertyContextDeps)
-        : url === '/property' || url === '/property/'
-        ? () => handleProperty(req, res, json, readBody, propertyDeps)
-        : url === '/region' || url === '/region/'
-        ? () => handleRegion(req, res, json)
-        : url === '/geocode' || url === '/geocode/'
-        ? () => handleGeocode(req, res, json, geocodeDeps)
-        : url === '/scrape' || url === '/scrape/'
-        ? () => handleScrape(req, res, json, readBody, scrapeDeps)
-        : () => {
-            json(res, 404, { error: `Unknown endpoint: ${url}` });
-            return Promise.resolve();
-          };
+    const handler = (isV1 ? v1Router.resolve(req.method, path) : undefined)
+      ?? router.resolve(req.method, path);
+    if (handler === undefined) {
+      // Unknown route: standard envelope on the /v1 surface, legacy flat
+      // shape (now with requestId) for unprefixed callers
+      if (isV1) {
+        json(res, 404, v1Error('not_found', `Unknown endpoint: ${rawPath}`, requestId));
+      } else {
+        json(res, 404, { error: `Unknown endpoint: ${rawPath}`, requestId });
+      }
+      return;
+    }
 
-    asyncHandler().catch((err: unknown) => {
-      console.error('Unhandled request error:', err instanceof Error ? err.stack : String(err));
+    // Catch unhandled rejections so every request gets a response
+    // (createServer does not propagate Promise rejections).
+    Promise.resolve(handler(req, res)).catch((err: unknown) => {
+      console.error('Unhandled request error:', err instanceof Error ? err.stack : String(err), 'requestId:', requestId);
       if (!res.headersSent) {
-        json(res, 500, { error: 'Internal server error' });
+        json(res, 500, isV1
+          ? v1Error('internal', 'Internal server error', requestId)
+          : { error: 'Internal server error', requestId });
       }
     });
   });
@@ -478,6 +664,7 @@ if (resolve(process.argv[1] ?? '') === __filename) {
     console.log('  POST /property/context');
     console.log('  GET  /region?zip=XXXXX');
     console.log('  GET  /geocode?q=<address>');
+    console.log('  POST /v1/reports (json|csv|pdf)');
   });
   server.on('error', (err) => {
     console.error('Server error:', err);

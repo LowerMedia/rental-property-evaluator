@@ -13,7 +13,8 @@
     "@rpe/engine": "workspace:*",
     "@rpe/property": "workspace:*",
     "@rpe/region-defaults": "workspace:*",
-    "@rpe/rentcast": "workspace:*"
+    "@rpe/rentcast": "workspace:*",
+    "@rpe/report": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

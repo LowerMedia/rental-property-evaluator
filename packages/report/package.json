@@ -1,0 +1,19 @@
+{
+  "name": "@rpe/report",
+  "version": "1.5.0",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@rpe/engine": "workspace:*",
+    "pdf-lib": "^1.17.1"
+  },
+  "devDependencies": {
+    "typescript": "catalog:"
+  }
+}
