@@ -4,3 +4,4 @@ export { appMeta as appMetaSqlite, sqliteSchema } from './schema.sqlite.js';
 export { seedDev } from './seed.js';
 export { createAuth, type CreateAuthOptions, type RpeAuth } from './auth.js';
 export { LoginThrottle, type ThrottleDecision, type ThrottlePolicy } from './loginThrottle.js';
+export { findMembership, listMemberships, roleAtLeast, OrgScope, TenantIsolationError, type Membership, type OrgRole } from './orgs.js';
