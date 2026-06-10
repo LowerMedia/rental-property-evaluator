@@ -11,6 +11,7 @@ import type { Server } from 'node:http';
 import { createApp } from '../src/index';
 import { buildOpenApiSpec, docsHtml } from '../src/openapi';
 import { mintKey } from '../src/services/apiKeys';
+import { createDb, type RpeDb } from '@rpe/db';
 
 const acme = mintKey('acme');
 
@@ -24,6 +25,12 @@ const IMPLEMENTED_V1: ReadonlyArray<readonly [string, string]> = [
   ['get', '/region'],
   ['get', '/geocode'],
   ['post', '/scrape'],
+  ['post', '/deals'],
+  ['get', '/deals'],
+  ['get', '/deals/{id}'],
+  ['patch', '/deals/{id}'],
+  ['delete', '/deals/{id}'],
+  ['get', '/deals/{id}/report'],
 ];
 
 /** Doc-surface routes intentionally NOT in the spec (they serve the spec). */
@@ -64,11 +71,15 @@ describe('OpenAPI spec (unit)', () => {
 describe('OpenAPI surface (integration)', () => {
   let server: Server;
   let base: string;
+  let db: RpeDb;
 
-  beforeAll(
-    () =>
-      new Promise<void>((resolve, reject) => {
-        server = createApp({ auth: { keys: [acme.record] }, v1RateLimit: { rpm: 1000, dailyCap: 10000 } });
+  beforeAll(async () => {
+    // deals surface needs a DB; the env key carries no org, so /v1/deals
+    // routes answer 403 (not 404) — exactly the drift contract
+    db = createDb(':memory:');
+    await db.applyMigrations();
+    await new Promise<void>((resolve, reject) => {
+        server = createApp({ auth: { keys: [acme.record] }, deals: { db }, v1RateLimit: { rpm: 1000, dailyCap: 10000 } });
         server.once('error', reject);
         server.listen(0, '127.0.0.1', () => {
           server.off('error', reject);
@@ -76,14 +87,15 @@ describe('OpenAPI surface (integration)', () => {
           base = `http://127.0.0.1:${addr.port}`;
           resolve();
         });
-      }),
-  );
+      });
+  });
 
-  afterAll(
-    () => new Promise<void>((resolve, reject) => {
+  afterAll(async () => {
+    await new Promise<void>((resolve, reject) => {
       server.close((err) => (err ? reject(err) : resolve()));
-    }),
-  );
+    });
+    await db.close();
+  });
 
   it('serves the spec at /v1/openapi.json without auth', async () => {
     const res = await fetch(`${base}/v1/openapi.json`);
