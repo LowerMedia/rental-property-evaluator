@@ -49,6 +49,7 @@ if (command === 'mint') {
     hash: createHash('sha256').update(secret).digest('hex'),
     createdAt: new Date().toISOString(),
     revokedAt: null,
+    lastUsedAt: null,
   };
   const records = load();
   records.push(record);
