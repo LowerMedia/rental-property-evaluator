@@ -42,6 +42,14 @@ describe('apiKeys (unit)', () => {
     expect(store.revoke(record.id)).toBe(false); // already revoked
   });
 
+  it('tracks lastUsedAt in-memory on successful verify', () => {
+    const { record, secret } = mintKey('acme');
+    const store = new ApiKeyStore([record]);
+    expect(record.lastUsedAt).toBeNull();
+    store.verify(secret, () => 1_700_000_000_000);
+    expect(record.lastUsedAt).toBe(new Date(1_700_000_000_000).toISOString());
+  });
+
   it('parseKeyRecords drops malformed entries instead of failing', () => {
     const { record } = mintKey('acme');
     const json = JSON.stringify([record, { id: 'broken' }, 42]);

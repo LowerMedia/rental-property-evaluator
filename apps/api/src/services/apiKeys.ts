@@ -26,6 +26,9 @@ export interface ApiKeyRecord {
   hash: string;
   createdAt: string;
   revokedAt: string | null;
+  /** Updated in-memory on successful verify; env/file stores are not
+   * written back (Phase 2's DB store persists this). */
+  lastUsedAt?: string | null;
 }
 
 export const KEY_PREFIX = 'rpe_live_';
@@ -46,6 +49,7 @@ export function mintKey(label: string, now: () => number = Date.now): {
     hash: hashSecret(secret),
     createdAt: new Date(now()).toISOString(),
     revokedAt: null,
+    lastUsedAt: null,
   };
   return { record, secret };
 }
@@ -118,13 +122,15 @@ export class ApiKeyStore {
    * Verify a presented secret. Constant-time hash comparison; returns
    * the active record or null (missing, malformed, unknown, revoked).
    */
-  verify(secret: string): ApiKeyRecord | null {
+  verify(secret: string, now: () => number = Date.now): ApiKeyRecord | null {
     if (!secret.startsWith(KEY_PREFIX)) return null;
     const presented = Buffer.from(hashSecret(secret), 'hex');
     for (const [hash, record] of this.byHash) {
       const stored = Buffer.from(hash, 'hex');
       if (stored.length === presented.length && timingSafeEqual(stored, presented)) {
-        return record.revokedAt === null ? record : null;
+        if (record.revokedAt !== null) return null;
+        record.lastUsedAt = new Date(now()).toISOString();
+        return record;
       }
     }
     return null;
