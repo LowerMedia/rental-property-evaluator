@@ -57,6 +57,7 @@ import { handleScrape, type ScrapeDeps, type ScrapeSuccessBody } from './routes/
 import { RateLimiter, TtlCache, clientIp } from './services/guardrails.js';
 import { Router, logRequest, normalizePath, resolveRequestId, v1Error } from './router.js';
 import { ApiKeyStore, extractApiKey, type ApiKeyRecord } from './services/apiKeys.js';
+import { handleDeals, type DealsDeps } from './routes/deals.js';
 import { toNodeHandler } from 'better-auth/node';
 import type { RpeAuth } from '@rpe/db';
 
@@ -413,6 +414,14 @@ export interface AppConfig {
    * RPE_API_KEYS env JSON, or RPE_API_KEYS_FILE. */
   auth?: {
     keys?: ApiKeyRecord[];
+    /** RPE-83: a pre-built store (e.g. DbApiKeyStore) — wins over keys/env. */
+    store?: Pick<ApiKeyStore, 'size' | 'verify' | 'revoke'>;
+  };
+  /** RPE-84: stored-deals surface — requires a DB and org-attached keys.
+   * Env: RPE_REPORT_CACHE_TTL_MS (default 600000) bounds the report cache. */
+  deals?: {
+    db: import('@rpe/db').RpeDb;
+    reportCacheTtlMs?: number;
   };
   /** /v1 public-surface throttle (RPE-76) — keyed by api key id, per-IP
    * for unauthenticated paths. In-memory fixed windows: a shared store
@@ -494,7 +503,7 @@ export function createApp(config: AppConfig = {}) {
   const corsAllowlist =
     config.cors?.origins ?? parseCorsOrigins(process.env['RPE_CORS_ORIGINS']);
 
-  const apiKeys = ApiKeyStore.fromEnv(config.auth?.keys);
+  const apiKeys = config.auth?.store ?? ApiKeyStore.fromEnv(config.auth?.keys);
   const sessionAuthHandler =
     config.session !== undefined ? toNodeHandler(config.session.auth) : null;
 
@@ -526,6 +535,11 @@ export function createApp(config: AppConfig = {}) {
     .on('POST', '/scrape', (rq, rs) => handleScrape(rq, rs, jsonWithRequestId, readBody, scrapeDeps));
 
   // /v1-native routes (RPE-79) — never exposed on the legacy unprefixed surface
+  const dealsDb = config.deals?.db ?? null;
+  const reportCache = new TtlCache<{ contentType: string; body: Uint8Array | string; disposition?: string }>(
+    config.deals?.reportCacheTtlMs ?? envInt('RPE_REPORT_CACHE_TTL_MS', 600_000),
+  );
+
   const v1Router = new Router()
     .on('GET', '/openapi.json', (rq, rs) => json(rs, 200, buildOpenApiSpec(VERSION)))
     .on('GET', '/docs', (rq, rs) => sendRaw(rs, 200, 'text/html; charset=utf-8', docsHtml()))
@@ -554,6 +568,7 @@ export function createApp(config: AppConfig = {}) {
     const isV1 = rawPath === '/v1' || rawPath.startsWith('/v1/');
     const path = isV1 ? normalizePath(rawPath.slice(3)) : rawPath;
     let apiKeyId: string | null = null;
+    let apiKeyOrgId: string | null = null;
 
     res.on('finish', () => {
       logRequest({
@@ -595,6 +610,7 @@ export function createApp(config: AppConfig = {}) {
       const record = presented !== null ? apiKeys.verify(presented) : null;
       if (record !== null) {
         apiKeyId = record.id;
+        apiKeyOrgId = (record as { organizationId?: string }).organizationId ?? null;
       } else if (!isV1Open) {
         // health/docs identify but never reject (load balancers and browsers don't auth);
         // everything else on /v1 requires a valid key
@@ -658,6 +674,42 @@ export function createApp(config: AppConfig = {}) {
       return;
     }
 
+    // Stored deals (RPE-84): org comes from the verified key — requires
+    // the RPE-83 DB-backed store; env-allowlist keys carry no org
+    const isV1Deals = isV1 && (path === '/deals' || path.startsWith('/deals/'));
+    if (isV1Deals) {
+      if (dealsDb === null) {
+        json(res, 404, v1Error('not_found', 'Deal storage is not enabled on this server.', requestId));
+        return;
+      }
+      if (apiKeyOrgId === null || apiKeyOrgId === '') {
+        json(res, 403, v1Error(
+          'forbidden',
+          'Stored deals require an organization-attached API key (DB-backed keys).',
+          requestId,
+        ));
+        return;
+      }
+      const dealsDeps: DealsDeps = {
+        db: dealsDb,
+        organizationId: apiKeyOrgId,
+        json: jsonWithRequestId,
+        readBody,
+        sendRaw,
+        requestId,
+        engineVersion: VERSION,
+        validate: validateEvaluateBody,
+        reportCache,
+      };
+      handleDeals(req, res, path.slice('/deals'.length), dealsDeps).catch((err: unknown) => {
+        console.error('Deals handler error:', err instanceof Error ? err.stack : String(err), 'requestId:', requestId);
+        if (!res.headersSent) {
+          json(res, 500, v1Error('internal', 'Internal server error', requestId));
+        }
+      });
+      return;
+    }
+
     const handler = (isV1 ? v1Router.resolve(req.method, path) : undefined)
       ?? router.resolve(req.method, path);
     if (handler === undefined) {
@@ -692,17 +744,22 @@ export function createApp(config: AppConfig = {}) {
  * Returns undefined (auth surface 404s) when any is missing — the
  * zero-config key-only deployment stays the default.
  */
-async function sessionFromEnv(): Promise<{ auth: RpeAuth } | undefined> {
-  const secret = process.env['BETTER_AUTH_SECRET'] ?? '';
-  const baseURL = process.env['RPE_AUTH_BASE_URL'] ?? '';
-  if (secret === '' || baseURL === '' || (process.env['DATABASE_URL'] ?? '') === '') {
-    return undefined;
-  }
+async function dbFromEnv(): Promise<import('@rpe/db').RpeDb | undefined> {
+  if ((process.env['DATABASE_URL'] ?? '') === '') return undefined;
   const { createDb } = await import('@rpe/db');
-  const { createSessionAuth } = await import('./services/session.js');
-  const { createMailerFromEnv } = await import('./services/mailer.js');
   const db = createDb();
   await db.applyMigrations();
+  return db;
+}
+
+async function sessionFromEnv(db: import('@rpe/db').RpeDb | undefined): Promise<{ auth: RpeAuth } | undefined> {
+  const secret = process.env['BETTER_AUTH_SECRET'] ?? '';
+  const baseURL = process.env['RPE_AUTH_BASE_URL'] ?? '';
+  if (secret === '' || baseURL === '' || db === undefined) {
+    return undefined;
+  }
+  const { createSessionAuth } = await import('./services/session.js');
+  const { createMailerFromEnv } = await import('./services/mailer.js');
   const auth = createSessionAuth({
     db,
     secret,
@@ -720,8 +777,25 @@ async function sessionFromEnv(): Promise<{ auth: RpeAuth } | undefined> {
 if (resolve(process.argv[1] ?? '') === __filename) {
   const port = validatePort(process.env['PORT']);
   const host = process.env['HOST'] ?? '0.0.0.0';
-  const session = await sessionFromEnv();
-  const server = createApp(session !== undefined ? { session } : {});
+  const entryDb = await dbFromEnv();
+  const session = await sessionFromEnv(entryDb);
+  // RPE-83: opt into DB-backed API keys (instant fleet revocation via
+  // periodic refresh); default stays the RPE-75 env/file allowlist
+  let keyStore: Pick<ApiKeyStore, 'size' | 'verify' | 'revoke'> | undefined;
+  if (process.env['RPE_API_KEYS_SOURCE'] === 'db' && entryDb !== undefined) {
+    const { DbApiKeyStore } = await import('./services/dbApiKeys.js');
+    const store = await DbApiKeyStore.load(entryDb);
+    const refreshSec = Number(process.env['RPE_API_KEYS_REFRESH_SEC'] ?? '30');
+    if (Number.isFinite(refreshSec) && refreshSec > 0) {
+      setInterval(() => void store.refresh().catch(() => undefined), refreshSec * 1000).unref();
+    }
+    keyStore = store;
+  }
+  const server = createApp({
+    ...(session !== undefined ? { session } : {}),
+    ...(keyStore !== undefined ? { auth: { store: keyStore } } : {}),
+    ...(entryDb !== undefined ? { deals: { db: entryDb } } : {}),
+  });
   server.listen(port, host, () => {
     if (session !== undefined) console.log('  /v1/auth/* (cookie sessions enabled)');
     console.log(`@rpe/api ${VERSION} listening on http://${host}:${port}`);

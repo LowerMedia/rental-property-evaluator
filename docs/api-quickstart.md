@@ -74,3 +74,27 @@ Errors return the standard envelope with consistent statuses
 
 429 responses include `Retry-After` (seconds). Limits are per key
 (`RPE_V1_RPM`, default 120/min; `RPE_V1_DAILY_CAP`, default 10000/day).
+
+## Stored deals (Phase 2 — RPE-84)
+
+Requires an **organization-attached API key** (DB-backed, `RPE_API_KEYS_SOURCE=db` — mint with `npx tsx apps/api/scripts/manage-keys-db.ts mint <orgId> <label>`). Env-allowlist keys get `403` on this surface.
+
+```bash
+# store a deal (same inputs shape as /v1/evaluate)
+curl -sS -X POST "$BASE/v1/deals" \
+  -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
+  -d '{"name":"Maple St duplex","inputs":{...}}'        # → 201 { "id": ... }
+
+# list / fetch / update / delete
+curl -sS "$BASE/v1/deals?limit=20" -H "Authorization: Bearer $KEY"
+curl -sS "$BASE/v1/deals/$DEAL_ID" -H "Authorization: Bearer $KEY"
+curl -sS -X PATCH "$BASE/v1/deals/$DEAL_ID" -H "Authorization: Bearer $KEY" \
+  -H 'Content-Type: application/json' -d '{"name":"Renamed"}'
+curl -sS -X DELETE "$BASE/v1/deals/$DEAL_ID" -H "Authorization: Bearer $KEY"   # → 204
+
+# pull a report for a stored deal (json | csv | pdf; cached — see X-Report-Cache)
+curl -sS "$BASE/v1/deals/$DEAL_ID/report?format=pdf" \
+  -H "Authorization: Bearer $KEY" -o deal-report.pdf
+```
+
+Cross-org ids return a uniform `404` — existence never leaks between tenants.
