@@ -545,23 +545,6 @@ export function createApp(config: AppConfig = {}) {
       return;
     }
 
-    // /v1 auth (RPE-75): enforced when keys are configured; /v1/health
-    // stays open for load balancers, legacy unprefixed routes stay open
-    // for the SPA
-    if (isV1 && apiKeys.size > 0) {
-      const presented = extractApiKey(req.headers);
-      const record = presented !== null ? apiKeys.verify(presented) : null;
-      if (record === null) {
-        json(res, 401, v1Error(
-          'unauthorized',
-          'A valid API key is required — send Authorization: Bearer <key> or X-API-Key.',
-          requestId,
-        ));
-        return;
-      }
-      apiKeyId = record.id;
-    }
-
     const handler = router.resolve(req.method, path);
     if (handler === undefined) {
       // Unknown route: standard envelope on the /v1 surface, legacy flat
