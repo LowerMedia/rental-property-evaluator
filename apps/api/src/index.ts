@@ -54,6 +54,7 @@ import { handleRegion } from './routes/region.js';
 import { handleScrape, type ScrapeDeps, type ScrapeSuccessBody } from './routes/scrape.js';
 import { RateLimiter, TtlCache } from './services/guardrails.js';
 import { Router, logRequest, normalizePath, resolveRequestId, v1Error } from './router.js';
+import { ApiKeyStore, extractApiKey, type ApiKeyRecord } from './services/apiKeys.js';
 
 // Hoist __filename/__dirname for use in VERSION and the entry-point guard below.
 const __filename = fileURLToPath(import.meta.url);
@@ -359,6 +360,13 @@ export interface AppConfig {
     rpm?: number;
     dailyCap?: number;
   };
+  /** /v1 API key auth (RPE-75). Enforced on the /v1 surface (except
+   * /v1/health) whenever the key store is non-empty; legacy unprefixed
+   * routes stay open for the SPA. Records via config (tests), the
+   * RPE_API_KEYS env JSON, or RPE_API_KEYS_FILE. */
+  auth?: {
+    keys?: ApiKeyRecord[];
+  };
   /** /scrape fallback (RPE-51). OFF unless RPE_SCRAPE_ENABLED=1/true —
    * enabling in production is a product/legal call. Env: RPE_SCRAPE_RPM
    * (default 5), RPE_SCRAPE_DAILY_CAP (default 50). */
@@ -421,6 +429,8 @@ export function createApp(config: AppConfig = {}) {
     ),
   };
 
+  const apiKeys = ApiKeyStore.fromEnv(config.auth?.keys);
+
   // Handler-emitted error bodies carry the request id too (RPE-74) —
   // the dispatcher sets X-Request-Id on the response before dispatch, so
   // the wrapper recovers it without per-request closures
@@ -451,6 +461,7 @@ export function createApp(config: AppConfig = {}) {
     const rawPath = normalizePath(req.url?.split('?')[0] ?? '/');
     const isV1 = rawPath === '/v1' || rawPath.startsWith('/v1/');
     const path = isV1 ? normalizePath(rawPath.slice(3)) : rawPath;
+    let apiKeyId: string | null = null;
 
     res.on('finish', () => {
       logRequest({
@@ -459,6 +470,7 @@ export function createApp(config: AppConfig = {}) {
         status: res.statusCode,
         latencyMs: Date.now() - startedAt,
         requestId,
+        ...(apiKeyId !== null ? { apiKeyId } : {}),
       });
     });
 
@@ -478,6 +490,23 @@ export function createApp(config: AppConfig = {}) {
         gitSha: process.env['GIT_SHA'] ?? null,
       });
       return;
+    }
+
+    // /v1 auth (RPE-75): enforced when keys are configured; /v1/health
+    // stays open for load balancers, legacy unprefixed routes stay open
+    // for the SPA
+    if (isV1 && apiKeys.size > 0) {
+      const presented = extractApiKey(req.headers);
+      const record = presented !== null ? apiKeys.verify(presented) : null;
+      if (record === null) {
+        json(res, 401, v1Error(
+          'unauthorized',
+          'A valid API key is required — send Authorization: Bearer <key> or X-API-Key.',
+          requestId,
+        ));
+        return;
+      }
+      apiKeyId = record.id;
     }
 
     const handler = router.resolve(req.method, path);
