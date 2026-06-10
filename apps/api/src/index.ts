@@ -645,6 +645,10 @@ export function createApp(config: AppConfig = {}) {
         json(res, 404, v1Error('not_found', 'Session auth is not enabled on this server.', requestId));
         return;
       }
+      // Resolve the client IP under the RPE-76 trust boundary (XFF
+      // first hop, socket fallback) so the login throttle never
+      // collapses direct connections into one shared bucket
+      req.headers['x-rpe-client-ip'] = clientIp(req);
       sessionAuthHandler(req, res).catch((err: unknown) => {
         console.error('Auth handler error:', err instanceof Error ? err.stack : String(err), 'requestId:', requestId);
         if (!res.headersSent) {
