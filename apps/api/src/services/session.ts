@@ -9,8 +9,9 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { fromNodeHeaders } from 'better-auth/node';
-import type { RpeAuth } from '@rpe/db';
+import { createAuth, type CreateAuthOptions, type RpeAuth } from '@rpe/db';
 import { v1Error } from '../router.js';
+import { passwordResetEmail, verificationEmail, type Mailer } from './mailer.js';
 
 type JsonFn = (res: ServerResponse, status: number, body: unknown) => void;
 
@@ -54,4 +55,24 @@ export async function requireSession(
     return null;
   }
   return context;
+}
+
+/**
+ * Convenience constructor binding @rpe/db's createAuth to our Mailer
+ * templates (RPE-95) — verification + reset emails flow through the
+ * injected Mailer (sandbox in CI, Resend in production).
+ */
+export function createSessionAuth(
+  options: Omit<CreateAuthOptions, 'sendVerificationEmail' | 'sendResetPassword'> & { mailer: Mailer },
+): RpeAuth {
+  const { mailer, ...rest } = options;
+  return createAuth({
+    ...rest,
+    sendVerificationEmail: async ({ email, url }) => {
+      await mailer.send(verificationEmail(email, url));
+    },
+    sendResetPassword: async ({ email, url }) => {
+      await mailer.send(passwordResetEmail(email, url));
+    },
+  });
 }
