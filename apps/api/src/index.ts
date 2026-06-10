@@ -57,6 +57,8 @@ import { handleScrape, type ScrapeDeps, type ScrapeSuccessBody } from './routes/
 import { RateLimiter, TtlCache, clientIp } from './services/guardrails.js';
 import { Router, logRequest, normalizePath, resolveRequestId, v1Error } from './router.js';
 import { ApiKeyStore, extractApiKey, type ApiKeyRecord } from './services/apiKeys.js';
+import { toNodeHandler } from 'better-auth/node';
+import type { RpeAuth } from '@rpe/db';
 
 // Hoist __filename/__dirname for use in VERSION and the entry-point guard below.
 const __filename = fileURLToPath(import.meta.url);
@@ -420,6 +422,13 @@ export interface AppConfig {
     rpm?: number;
     dailyCap?: number;
   };
+  /** Cookie-session auth (RPE-89, ADR 0001). Inject a configured
+   * better-auth instance (createAuth from @rpe/db — the caller owns the
+   * db lifecycle + migrations). When absent, /v1/auth/* returns 404 and
+   * the API runs key-only as before. */
+  session?: {
+    auth: RpeAuth;
+  };
   /** /scrape fallback (RPE-51). OFF unless RPE_SCRAPE_ENABLED=1/true —
    * enabling in production is a product/legal call. Env: RPE_SCRAPE_RPM
    * (default 5), RPE_SCRAPE_DAILY_CAP (default 50). */
@@ -486,6 +495,8 @@ export function createApp(config: AppConfig = {}) {
     config.cors?.origins ?? parseCorsOrigins(process.env['RPE_CORS_ORIGINS']);
 
   const apiKeys = ApiKeyStore.fromEnv(config.auth?.keys);
+  const sessionAuthHandler =
+    config.session !== undefined ? toNodeHandler(config.session.auth) : null;
 
   const v1Limiter = new RateLimiter(
     config.v1RateLimit?.rpm ?? envInt('RPE_V1_RPM', 120),
@@ -572,10 +583,12 @@ export function createApp(config: AppConfig = {}) {
       );
     }
 
+    const isV1Session = isV1 && (path === '/auth' || path.startsWith('/auth/'));
     const isV1Open =
       isV1 &&
-      req.method === 'GET' &&
-      (path === '/health' || path === '/openapi.json' || path === '/docs');
+      ((req.method === 'GET' &&
+        (path === '/health' || path === '/openapi.json' || path === '/docs')) ||
+        isV1Session); // cookie surface — better-auth owns its own auth + CSRF
     const isV1Health = isV1 && path === '/health' && req.method === 'GET';
     if (isV1 && apiKeys.size > 0) {
       const presented = extractApiKey(req.headers);
@@ -624,6 +637,27 @@ export function createApp(config: AppConfig = {}) {
       return;
     }
 
+    // Cookie-session surface (RPE-89): better-auth handles everything
+    // under /v1/auth — its own routing, cookies, and CSRF origin checks.
+    // Runs after the per-IP throttle (brute-force pre-protection).
+    if (isV1Session) {
+      if (sessionAuthHandler === null) {
+        json(res, 404, v1Error('not_found', 'Session auth is not enabled on this server.', requestId));
+        return;
+      }
+      // Resolve the client IP under the RPE-76 trust boundary (XFF
+      // first hop, socket fallback) so the login throttle never
+      // collapses direct connections into one shared bucket
+      req.headers['x-rpe-client-ip'] = clientIp(req);
+      sessionAuthHandler(req, res).catch((err: unknown) => {
+        console.error('Auth handler error:', err instanceof Error ? err.stack : String(err), 'requestId:', requestId);
+        if (!res.headersSent) {
+          json(res, 500, v1Error('internal', 'Internal server error', requestId));
+        }
+      });
+      return;
+    }
+
     const handler = (isV1 ? v1Router.resolve(req.method, path) : undefined)
       ?? router.resolve(req.method, path);
     if (handler === undefined) {
@@ -652,11 +686,44 @@ export function createApp(config: AppConfig = {}) {
 
 // ── Entry point (skipped when imported by tests/other modules) ────────────────
 
+/**
+ * Build the cookie-session config from env (RPE-96 entry wiring):
+ * requires BETTER_AUTH_SECRET + DATABASE_URL + RPE_AUTH_BASE_URL.
+ * Returns undefined (auth surface 404s) when any is missing — the
+ * zero-config key-only deployment stays the default.
+ */
+async function sessionFromEnv(): Promise<{ auth: RpeAuth } | undefined> {
+  const secret = process.env['BETTER_AUTH_SECRET'] ?? '';
+  const baseURL = process.env['RPE_AUTH_BASE_URL'] ?? '';
+  if (secret === '' || baseURL === '' || (process.env['DATABASE_URL'] ?? '') === '') {
+    return undefined;
+  }
+  const { createDb } = await import('@rpe/db');
+  const { createSessionAuth } = await import('./services/session.js');
+  const { createMailerFromEnv } = await import('./services/mailer.js');
+  const db = createDb();
+  await db.applyMigrations();
+  const auth = createSessionAuth({
+    db,
+    secret,
+    baseURL,
+    trustedOrigins: (process.env['RPE_AUTH_TRUSTED_ORIGINS'] ?? baseURL).split(',').map((o) => o.trim()),
+    mailer: createMailerFromEnv(),
+    ...(process.env['RPE_REQUIRE_EMAIL_VERIFICATION'] === '1' ||
+    process.env['RPE_REQUIRE_EMAIL_VERIFICATION'] === 'true'
+      ? { requireEmailVerification: true }
+      : {}),
+  });
+  return { auth };
+}
+
 if (resolve(process.argv[1] ?? '') === __filename) {
   const port = validatePort(process.env['PORT']);
   const host = process.env['HOST'] ?? '0.0.0.0';
-  const server = createApp();
+  const session = await sessionFromEnv();
+  const server = createApp(session !== undefined ? { session } : {});
   server.listen(port, host, () => {
+    if (session !== undefined) console.log('  /v1/auth/* (cookie sessions enabled)');
     console.log(`@rpe/api ${VERSION} listening on http://${host}:${port}`);
     console.log('  GET  /health');
     console.log('  POST /evaluate');

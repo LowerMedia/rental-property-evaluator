@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1781109300021,
+      "tag": "0000_striped_marvel_zombies",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1781109867687,
+      "tag": "0001_amused_gideon",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1781111182409,
+      "tag": "0002_tiresome_green_goblin",
+      "breakpoints": true
+    }
+  ]
+}

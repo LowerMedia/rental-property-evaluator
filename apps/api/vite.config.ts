@@ -24,7 +24,11 @@ export default defineConfig({
     sourcemap: true,
   },
   ssr: {
-    noExternal: ['@rpe/engine', '@rpe/rentcast', '@rpe/region-defaults'],
+    noExternal: ['@rpe/engine', '@rpe/rentcast', '@rpe/region-defaults', '@rpe/db', '@rpe/report', '@rpe/property'],
+    // Native/N-API and driver packages must stay runtime requires —
+    // rollup cannot ingest .node binaries (E11 entry wiring pulls
+    // @rpe/db → argon2/better-sqlite3/pg into the graph)
+    external: ['@node-rs/argon2', 'better-sqlite3', 'pg', 'better-auth', 'drizzle-orm'],
   },
   resolve: {
     conditions: ['import', 'default'],
