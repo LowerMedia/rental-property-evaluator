@@ -11,7 +11,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { fromNodeHeaders } from 'better-auth/node';
 import { createAuth, type CreateAuthOptions, type RpeAuth } from '@rpe/db';
 import { v1Error } from '../router.js';
-import { passwordResetEmail, verificationEmail, type Mailer } from './mailer.js';
+import { orgInviteEmail, passwordResetEmail, verificationEmail, type Mailer } from './mailer.js';
 
 type JsonFn = (res: ServerResponse, status: number, body: unknown) => void;
 
@@ -73,6 +73,9 @@ export function createSessionAuth(
     },
     sendResetPassword: async ({ email, url }) => {
       await mailer.send(passwordResetEmail(email, url));
+    },
+    sendOrgInvite: async ({ email, orgName, url }) => {
+      await mailer.send(orgInviteEmail(email, orgName, url));
     },
   });
 }

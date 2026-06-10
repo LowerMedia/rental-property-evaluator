@@ -22,7 +22,7 @@ export const appMeta = sqliteTable('app_meta', {
     .default(sql`(unixepoch() * 1000)`),
 });
 
-import { account as authAccountLite, session as authSessionLite, user as authUserLite, verification as authVerificationLite } from './schema.auth.sqlite.js';
+import { account as authAccountLite, invitation as authInvitationLite, member as authMemberLite, organization as authOrganizationLite, session as authSessionLite, user as authUserLite, verification as authVerificationLite } from './schema.auth.sqlite.js';
 
 export const sqliteSchema = {
   appMeta,
@@ -30,4 +30,7 @@ export const sqliteSchema = {
   session: authSessionLite,
   account: authAccountLite,
   verification: authVerificationLite,
+  organization: authOrganizationLite,
+  member: authMemberLite,
+  invitation: authInvitationLite,
 };

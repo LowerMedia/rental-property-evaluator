@@ -16,6 +16,7 @@
 
 import { Algorithm, hash, verify } from '@node-rs/argon2';
 import { betterAuth } from 'better-auth';
+import { organization } from 'better-auth/plugins/organization';
 import { APIError, createAuthMiddleware } from 'better-auth/api';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import type { RpeDb } from './client.js';
@@ -51,6 +52,10 @@ export interface CreateAuthOptions {
   /** Reset-request spam throttle (RPE-92) — same mechanism, request-count
    * policy (every request counts; responses are always neutral). */
   resetRequestThrottle?: LoginThrottle;
+  /** Org-invite email hook (RPE-93) — bound to the Mailer by apps/api. */
+  sendOrgInvite?: (data: { email: string; orgName: string; url: string }) => Promise<void>;
+  /** Base URL of the front-end accept page for invite links (RPE-93). */
+  inviteAcceptUrlBase?: string;
 }
 
 const SIGN_IN_PATH = '/sign-in/email';
@@ -120,6 +125,22 @@ export function createAuth(options: CreateAuthOptions) {
       // production enforces (caught by the RPE-89 harness)
       disableOriginCheck: false,
     },
+    plugins: [
+      // ADR 0001 scope: organization ON (owner/admin/member roles,
+      // tokenized invites); api-key plugin stays OFF — RPE-75 keys
+      // remain the machine credential
+      organization({
+        sendInvitationEmail: async (data) => {
+          if (options.sendOrgInvite === undefined) return;
+          const base = options.inviteAcceptUrlBase ?? `${options.baseURL}/accept-invitation`;
+          await options.sendOrgInvite({
+            email: data.email,
+            orgName: data.organization.name,
+            url: `${base}/${data.id}`,
+          });
+        },
+      }),
+    ],
     hooks: {
       // Brute-force throttle on the sign-in path (RPE-91): the hook
       // layer sees the parsed body, so lockout keys on the submitted

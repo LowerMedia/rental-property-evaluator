@@ -22,7 +22,7 @@ export const appMeta = pgTable('app_meta', {
     .defaultNow(),
 });
 
-import { account as authAccountPg, session as authSessionPg, user as authUserPg, verification as authVerificationPg } from './schema.auth.pg.js';
+import { account as authAccountPg, invitation as authInvitationPg, member as authMemberPg, organization as authOrganizationPg, session as authSessionPg, user as authUserPg, verification as authVerificationPg } from './schema.auth.pg.js';
 
 export const pgSchema = {
   appMeta,
@@ -30,4 +30,7 @@ export const pgSchema = {
   session: authSessionPg,
   account: authAccountPg,
   verification: authVerificationPg,
+  organization: authOrganizationPg,
+  member: authMemberPg,
+  invitation: authInvitationPg,
 };
