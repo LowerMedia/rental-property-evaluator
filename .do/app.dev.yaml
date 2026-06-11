@@ -1,21 +1,19 @@
-# RPE-98 — DigitalOcean App Platform spec: STAGE (rpe-staging).
+# RPE-98 — DigitalOcean App Platform spec: DEV (rpe-dev).
 #
-# Create:   doctl apps create --spec .do/app.staging.yaml
-# Update:   doctl apps update <STAGING_APP_ID> --spec .do/app.staging.yaml
+# Create:   doctl apps create --spec .do/app.dev.yaml
+# Update:   doctl apps update <DEV_APP_ID> --spec .do/app.dev.yaml
 #
-# Stage tracks the CURRENT RELEASE BRANCH — it always shows what ships
-# next. RELEASE RITUAL: when a new release branch is cut (e.g. v1.9.0),
-# bump the two `branch:` fields below and apply. Auto-deploys on every
-# cherry-pick pushed to the release branch.
+# Dev tracks `develop` — every merged task auto-deploys here, the
+# integration view ahead of stage (release branch) and prod (main).
 #
-# DNS: CNAME stage.rentalpropertyevaluator.com → this app's default
+# DNS: CNAME dev.rentalpropertyevaluator.com → this app's default
 # ondigitalocean.app hostname (Cloudflare zone), after first create.
 # Dev-tier database (no backups); sandbox mailer (no real email).
-name: rpe-staging
+name: rpe-dev
 region: nyc
 
 domains:
-  - domain: stage.rentalpropertyevaluator.com
+  - domain: dev.rentalpropertyevaluator.com
     type: PRIMARY
 
 databases:
@@ -49,7 +47,7 @@ services:
     dockerfile_path: apps/api/Dockerfile
     github:
       repo: LowerMedia/rental-property-evaluator
-      branch: v1.8.0 # ← bump when the next release branch is cut
+      branch: develop
       deploy_on_push: true
     http_port: 3001
     instance_count: 1
@@ -74,10 +72,7 @@ services:
       - key: RPE_CORS_ORIGINS
         scope: RUN_TIME
         value: ${APP_URL}
-      # Sandbox mailer by default (no RPE_MAIL_PROVIDER set): stage never
-      # sends real email, so verification is off. To exercise the real
-      # email flow here, add RPE_MAIL_PROVIDER=resend + the RESEND_API_KEY
-      # secret + RPE_MAIL_FROM and flip this to "true".
+      # Sandbox mailer by default — see the note in app.staging.yaml.
       - key: RPE_REQUIRE_EMAIL_VERIFICATION
         scope: RUN_TIME
         value: "false"
@@ -93,7 +88,7 @@ static_sites:
     source_dir: /
     github:
       repo: LowerMedia/rental-property-evaluator
-      branch: v1.8.0 # ← bump when the next release branch is cut
+      branch: develop
       deploy_on_push: true
     environment_slug: node-js
     build_command: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @rpe/web build

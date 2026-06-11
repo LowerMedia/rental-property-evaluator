@@ -18,8 +18,13 @@ SPA paths** (`/health /evaluate /property /region /geocode /scrape`) to
 requires this same-origin layout — do not split SPA and API across
 hostnames.
 
-Specs: [.do/app.yaml](../.do/app.yaml) (prod, tracks `main`) and
-[.do/app.staging.yaml](../.do/app.staging.yaml) (staging, tracks `develop`).
+Specs (one app per branch tier, mirroring the git strategy):
+
+| Spec | App | Tracks | Hostname |
+|---|---|---|---|
+| [.do/app.yaml](../.do/app.yaml) | rpe-prod | `main` (releases) | rentalpropertyevaluator.com + aliases |
+| [.do/app.staging.yaml](../.do/app.staging.yaml) | rpe-staging | current release branch (`v1.8.0` — **bump on each release cut**) | stage.rentalpropertyevaluator.com |
+| [.do/app.dev.yaml](../.do/app.dev.yaml) | rpe-dev | `develop` (every merged task) | dev.rentalpropertyevaluator.com |
 
 ### Multi-domain (RPE-98)
 
@@ -73,17 +78,22 @@ doctl apps spec get <APP_ID> > /tmp/live.yaml
 Region note: keep `region` in the spec aligned with the legacy app's
 region (check `doctl apps list`) and the PG cluster's region.
 
-## 3. Provision staging
+## 3. Provision dev + stage
 
 ```bash
-doctl apps create --spec .do/app.staging.yaml
-# set BETTER_AUTH_SECRET + HUD_TOKEN secrets (fresh values, not prod's)
+doctl apps create --spec .do/app.dev.yaml      # tracks develop
+doctl apps create --spec .do/app.staging.yaml  # tracks the release branch
+# set BETTER_AUTH_SECRET + HUD_TOKEN on each (fresh values, not prod's)
 ```
 
-The default `<app>.ondigitalocean.app` URL is the stable staging
-hostname (`${APP_URL}` feeds the auth/CORS env). Email verification is
-off on staging (sandbox mailer) — see the comment in the spec to
-exercise real email.
+After creation, add the two CNAMEs (§6) so `dev.` / `stage.` resolve;
+until then the default `<app>.ondigitalocean.app` URLs work (`${APP_URL}`
+feeds the auth/CORS env either way). Email verification is off on both
+(sandbox mailer) — see the spec comment to exercise real email.
+
+**Release ritual:** when cutting the next release branch (e.g. `v1.9.0`),
+bump the two `branch:` fields in `app.staging.yaml` and
+`doctl apps update` — stage then follows the new release.
 
 ## 4. Environment matrix
 
@@ -127,7 +137,8 @@ zones (wherever their DNS is hosted).
 | `rentalpropertyevaluator.com` (apex, CNAME-flattened) | rentalpropertyevaluator.com | `<rpe-prod>.ondigitalocean.app` |
 | `rpe.lowprop.com` CNAME | lowprop.com | `<rpe-prod>.ondigitalocean.app` |
 | `rpe.goldfinchproperties.com` CNAME | goldfinchproperties.com | `<rpe-prod>.ondigitalocean.app` |
-| `staging.rentalpropertyevaluator.com` CNAME (optional) | rentalpropertyevaluator.com | `<rpe-staging>.ondigitalocean.app` |
+| `stage.rentalpropertyevaluator.com` CNAME | rentalpropertyevaluator.com | `<rpe-staging>.ondigitalocean.app` |
+| `dev.rentalpropertyevaluator.com` CNAME | rentalpropertyevaluator.com | `<rpe-dev>.ondigitalocean.app` |
 
 Certificate issuance: App Platform issues Let's Encrypt certs per
 domain and needs to observe the DNS pointing at it. With the Cloudflare
@@ -213,11 +224,12 @@ DATABASE_URL='postgres://…' pnpm --filter @rpe/api exec \
 
 | Item | $ |
 |---|---|
-| api service (apps-s-1vcpu-0.5gb) | 5 |
-| web static site | 0 (free tier ×3) |
+| prod api service (apps-s-1vcpu-0.5gb) | 5 |
+| web static sites | 0 (free tier ×3) |
 | managed PG `rpe-pg` (1 vCPU/1 GB) | 15 |
-| staging app (service + dev PG) | 5 + 7 |
-| **Total** | **~32 with staging, ~20 without** |
+| stage app (service + dev PG) | 5 + 7 |
+| dev app (service + dev PG) | 5 + 7 |
+| **Total** | **~44 with dev+stage, ~20 prod-only** |
 
-Staging can be torn down between releases (`doctl apps delete`) — the
-spec recreates it in minutes.
+Dev/stage can be torn down anytime (`doctl apps delete`) — the specs
+recreate them in minutes.
