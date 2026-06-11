@@ -1,0 +1,109 @@
+# RPE-98 — DigitalOcean App Platform spec: STAGING (rpe-staging).
+#
+# Create:   doctl apps create --spec .do/app.staging.yaml
+# Update:   doctl apps update <STAGING_APP_ID> --spec .do/app.staging.yaml
+#
+# Tracks `develop` (every shipped task lands there in order — the release
+# branch name rotates each cycle, develop doesn't). Uses the cheap dev-tier
+# database (no backups) and the ${APP_URL} bindable so the default
+# <app>.ondigitalocean.app hostname is the stable staging URL out of the
+# box. Optionally attach staging.rentalpropertyevaluator.com later by
+# uncommenting the domains block (CNAME in Cloudflare → default hostname).
+name: rpe-staging
+region: nyc
+
+# domains:
+#   - domain: staging.rentalpropertyevaluator.com
+#     type: PRIMARY
+
+databases:
+  # Dev-tier database (no cluster_name → $7 dev PG, no backups).
+  - name: db
+    engine: PG
+    version: "16"
+
+ingress:
+  rules:
+    - match: { path: { prefix: /v1 } }
+      component: { name: api }
+    - match: { path: { prefix: /health } }
+      component: { name: api }
+    - match: { path: { prefix: /evaluate } }
+      component: { name: api }
+    - match: { path: { prefix: /property } }
+      component: { name: api }
+    - match: { path: { prefix: /region } }
+      component: { name: api }
+    - match: { path: { prefix: /geocode } }
+      component: { name: api }
+    - match: { path: { prefix: /scrape } }
+      component: { name: api }
+    - match: { path: { prefix: / } }
+      component: { name: web }
+
+services:
+  - name: api
+    source_dir: /
+    dockerfile_path: apps/api/Dockerfile
+    github:
+      repo: LowerMedia/rental-property-evaluator
+      branch: develop
+      deploy_on_push: true
+    http_port: 3001
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    health_check:
+      http_path: /v1/health
+      initial_delay_seconds: 15
+      period_seconds: 30
+    envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${db.DATABASE_URL}
+      - key: RPE_API_KEYS_SOURCE
+        scope: RUN_TIME
+        value: db
+      - key: RPE_AUTH_BASE_URL
+        scope: RUN_TIME
+        value: ${APP_URL}
+      - key: RPE_AUTH_TRUSTED_ORIGINS
+        scope: RUN_TIME
+        value: ${APP_URL}
+      - key: RPE_CORS_ORIGINS
+        scope: RUN_TIME
+        value: ${APP_URL}
+      # Sandbox mailer by default (no RPE_MAIL_PROVIDER set): staging never
+      # sends real email, so verification is off. To exercise the real
+      # email flow on staging, add RPE_MAIL_PROVIDER=resend + the
+      # RESEND_API_KEY secret + RPE_MAIL_FROM and flip this to "true".
+      - key: RPE_REQUIRE_EMAIL_VERIFICATION
+        scope: RUN_TIME
+        value: "false"
+      - key: BETTER_AUTH_SECRET
+        scope: RUN_TIME
+        type: SECRET
+      - key: HUD_TOKEN
+        scope: RUN_TIME
+        type: SECRET
+
+static_sites:
+  - name: web
+    source_dir: /
+    github:
+      repo: LowerMedia/rental-property-evaluator
+      branch: develop
+      deploy_on_push: true
+    environment_slug: node-js
+    build_command: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @rpe/web build
+    output_dir: apps/web/dist
+    catchall_document: index.html
+    envs:
+      - key: VITE_API_URL
+        scope: BUILD_TIME
+        value: ""
+      - key: VITE_AUTH_ENABLED
+        scope: BUILD_TIME
+        value: "true"
+      - key: VITE_ADS_ENABLED
+        scope: BUILD_TIME
+        value: "false"
