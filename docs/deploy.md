@@ -163,6 +163,8 @@ curl -s -o /dev/null -w "%{http_code}\n" $BASE/          # 200 SPA
 curl -s "$BASE/region?zip=52240" | jq .                   # legacy path → api
 curl -s -X POST $BASE/v1/evaluate -H 'content-type: application/json' \
   -d '{"inputs":{}}' -o /dev/null -w "%{http_code}\n"     # 401 without key
+# NOTE: the 401 requires ≥1 key minted (§9) — with zero keys configured
+# the /v1 surface is open by design (RPE-75), so mint before asserting.
 # authenticated evaluate + reports + deals CRUD: use the curl bodies from
 # docs/api-quickstart.md with  -H "X-API-Key: $KEY"
 ```
