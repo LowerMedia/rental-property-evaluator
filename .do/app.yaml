@@ -14,8 +14,14 @@
 # can only belong to one app, and the legacy app holds the primary until
 # DNS flips. Until then, deploy/smoke on the default ondigitalocean.app URL
 # by commenting the domains block out.
+# Region: sfo — matches the legacy prod app (063f8576-…) and dev/stage
+# (verified 2026-06-11).
 name: rpe-prod
-region: nyc
+region: sfo
+
+alerts:
+  - rule: DEPLOYMENT_FAILED
+  - rule: DOMAIN_FAILED
 
 domains:
   - domain: rentalpropertyevaluator.com
@@ -28,7 +34,7 @@ domains:
 databases:
   # Managed cluster (automated backups) — create it BEFORE first apply:
   #   doctl databases create rpe-pg --engine pg --version 16 \
-  #     --size db-s-1vcpu-1gb --region nyc1 --num-nodes 1
+  #     --size db-s-1vcpu-1gb --region sfo3 --num-nodes 1
   # docs/deploy.md §2. DATABASE_URL is injected via the ${db.DATABASE_URL}
   # bindable; the api applies drizzle migrations at first connect.
   - name: db
@@ -123,6 +129,11 @@ static_sites:
     output_dir: apps/web/dist
     catchall_document: index.html
     envs:
+      # Buildpack provisions pnpm via corepack (packageManager field) —
+      # needs a corepack-bundled Node (engines <25) and no download prompt.
+      - key: COREPACK_ENABLE_DOWNLOAD_PROMPT
+        scope: BUILD_TIME
+        value: "0"
       # Same-origin API: ingress routes /v1 + the legacy SPA paths to the
       # api service, so the SPA fetches relative URLs (empty = relative).
       - key: VITE_API_URL
