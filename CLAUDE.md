@@ -49,7 +49,9 @@ docs/api-testing.md.
 Production is **DigitalOcean App Platform** at `https://rentalpropertyevaluator.com`
 (NOT rpe.lowermedia.net), behind Cloudflare DNS, with alias domains
 `rpe.lowprop.com` and `rpe.goldfinchproperties.com` (RPE-98). Specs live in
-`.do/` (prod tracks `main`, staging tracks `develop`); the api ships via
+`.do/`: prod tracks `main`, `stage.rentalpropertyevaluator.com` tracks the
+current release branch (bump `app.staging.yaml` on each release cut),
+`dev.rentalpropertyevaluator.com` tracks `develop`. The api ships via
 `apps/api/Dockerfile`. Runbook: `docs/deploy.md` — read it before touching
 domains, secrets, or the specs. Same-origin constraint: ingress must route
 `/v1` + legacy SPA paths to the api; never split SPA and API across hostnames.
