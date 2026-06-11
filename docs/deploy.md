@@ -22,9 +22,14 @@ Specs (one app per branch tier, mirroring the git strategy):
 
 | Spec | App | Tracks | Hostname |
 |---|---|---|---|
-| [.do/app.yaml](../.do/app.yaml) | rpe-prod | `main` (releases) | rentalpropertyevaluator.com + aliases |
-| [.do/app.staging.yaml](../.do/app.staging.yaml) | rpe-staging | current release branch (`v1.8.0` — **bump on each release cut**) | stage.rentalpropertyevaluator.com |
-| [.do/app.dev.yaml](../.do/app.dev.yaml) | rpe-dev | `develop` (every merged task) | dev.rentalpropertyevaluator.com |
+| [.do/app.yaml](../.do/app.yaml) | rpe-prod (created at cutover) | `main` (releases) | rentalpropertyevaluator.com + aliases |
+| [.do/app.staging.yaml](../.do/app.staging.yaml) | rental-property-evaluator-stage `a5f7c0d2-…` | current release branch (`v1.8.0` — **bump on each release cut**) | stage.rentalpropertyevaluator.com |
+| [.do/app.dev.yaml](../.do/app.dev.yaml) | rental-property-evaluator-dev `4e7dd243-…` | `develop` (every merged task) | dev.rentalpropertyevaluator.com |
+
+All apps live in **sfo** (the legacy apps' region — verified 2026-06-11).
+Dev + stage were the legacy CRA apps **updated in place** (they kept
+their names, domains, certs, and DNS), so their hostnames were live from
+the first deployment.
 
 ### Multi-domain (RPE-98)
 
@@ -59,7 +64,7 @@ behavior:
 ```bash
 # a) managed Postgres cluster (name must match cluster_name in the spec)
 doctl databases create rpe-pg --engine pg --version 16 \
-  --size db-s-1vcpu-1gb --region nyc1 --num-nodes 1
+  --size db-s-1vcpu-1gb --region sfo3 --num-nodes 1
 
 # b) first create — comment out the `domains:` block in .do/app.yaml
 #    (the legacy app still owns the primary domain), then:
@@ -78,17 +83,19 @@ doctl apps spec get <APP_ID> > /tmp/live.yaml
 Region note: keep `region` in the spec aligned with the legacy app's
 region (check `doctl apps list`) and the PG cluster's region.
 
-## 3. Provision dev + stage
+## 3. Dev + stage (live since 2026-06-11)
+
+Both were legacy CRA apps **updated in place** with the committed specs —
+they kept their names, app IDs, domains, certs, and DNS. To change them:
 
 ```bash
-doctl apps create --spec .do/app.dev.yaml      # tracks develop
-doctl apps create --spec .do/app.staging.yaml  # tracks the release branch
-# set BETTER_AUTH_SECRET + HUD_TOKEN on each (fresh values, not prod's)
+doctl apps update 4e7dd243-c8f4-4061-9f55-7db4f05b661c --spec .do/app.dev.yaml
+doctl apps update a5f7c0d2-161b-407d-a84f-ca1a594271da --spec .do/app.staging.yaml
 ```
 
-After creation, add the two CNAMEs (§6) so `dev.` / `stage.` resolve;
-until then the default `<app>.ondigitalocean.app` URLs work (`${APP_URL}`
-feeds the auth/CORS env either way). Email verification is off on both
+`BETTER_AUTH_SECRET` is set (committed as encrypted EV values);
+`HUD_TOKEN` is an encrypted empty string until the real token is added
+(console → round-trip the EV per §5). Email verification is off on both
 (sandbox mailer) — see the spec comment to exercise real email.
 
 **Release ritual:** when cutting the next release branch (e.g. `v1.9.0`),
@@ -137,8 +144,8 @@ zones (wherever their DNS is hosted).
 | `rentalpropertyevaluator.com` (apex, CNAME-flattened) | rentalpropertyevaluator.com | `<rpe-prod>.ondigitalocean.app` |
 | `rpe.lowprop.com` CNAME | lowprop.com | `<rpe-prod>.ondigitalocean.app` |
 | `rpe.goldfinchproperties.com` CNAME | goldfinchproperties.com | `<rpe-prod>.ondigitalocean.app` |
-| `stage.rentalpropertyevaluator.com` CNAME | rentalpropertyevaluator.com | `<rpe-staging>.ondigitalocean.app` |
-| `dev.rentalpropertyevaluator.com` CNAME | rentalpropertyevaluator.com | `<rpe-dev>.ondigitalocean.app` |
+| `stage.rentalpropertyevaluator.com` CNAME (already in place) | rentalpropertyevaluator.com | `rental-property-evaluator-stage-cg55a.ondigitalocean.app` |
+| `dev.rentalpropertyevaluator.com` CNAME (already in place) | rentalpropertyevaluator.com | `rental-property-evaluator-dev-uv7fo.ondigitalocean.app` |
 
 Certificate issuance: App Platform issues Let's Encrypt certs per
 domain and needs to observe the DNS pointing at it. With the Cloudflare

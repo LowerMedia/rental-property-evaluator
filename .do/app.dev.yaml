@@ -1,16 +1,22 @@
-# RPE-98 — DigitalOcean App Platform spec: DEV (rpe-dev).
+# RPE-98 — DigitalOcean App Platform spec: DEV.
 #
-# Create:   doctl apps create --spec .do/app.dev.yaml
-# Update:   doctl apps update <DEV_APP_ID> --spec .do/app.dev.yaml
+# App ID:   4e7dd243-c8f4-4061-9f55-7db4f05b661c (pre-existing legacy dev
+#           app, updated in place 2026-06-11 — kept its name, region, and
+#           the already-attached dev.rentalpropertyevaluator.com domain)
+# Update:   doctl apps update 4e7dd243-c8f4-4061-9f55-7db4f05b661c --spec .do/app.dev.yaml
 #
 # Dev tracks `develop` — every merged task auto-deploys here, the
 # integration view ahead of stage (release branch) and prod (main).
-#
-# DNS: CNAME dev.rentalpropertyevaluator.com → this app's default
-# ondigitalocean.app hostname (Cloudflare zone), after first create.
 # Dev-tier database (no backups); sandbox mailer (no real email).
-name: rpe-dev
-region: nyc
+# SECRET values are DO-encrypted (EV[...]), sealed to this app — after
+# changing a secret in the console, round-trip `doctl apps spec get`
+# output back here (docs/deploy.md §5).
+name: rental-property-evaluator-dev
+region: sfo
+
+alerts:
+  - rule: DEPLOYMENT_FAILED
+  - rule: DOMAIN_FAILED
 
 domains:
   - domain: dev.rentalpropertyevaluator.com
@@ -79,9 +85,13 @@ services:
       - key: BETTER_AUTH_SECRET
         scope: RUN_TIME
         type: SECRET
+        value: EV[1:XpVT0JO+RNBfio9Fz6q/TPbX05r9MqtZ:0SQ8eYshVTkeEBGhOcVA/lcuiaonHIzH4/t79wvPDxTqrlPCQ3i/xYFyISmr4iQmmACI5BFU1fPh/to6]
+      # HUD_TOKEN is currently an encrypted EMPTY string — set the real
+      # token in the console, then round-trip the new EV value here.
       - key: HUD_TOKEN
         scope: RUN_TIME
         type: SECRET
+        value: EV[1:hqRa6JU8A7rI4BYv+2Xdhxm3VnjGDi5f:vDFFfrXuHsKxg4IW10XSVg==]
 
 static_sites:
   - name: web
@@ -95,6 +105,11 @@ static_sites:
     output_dir: apps/web/dist
     catchall_document: index.html
     envs:
+      # Buildpack provisions pnpm via corepack (packageManager field) —
+      # needs a corepack-bundled Node (engines <25) and no download prompt.
+      - key: COREPACK_ENABLE_DOWNLOAD_PROMPT
+        scope: BUILD_TIME
+        value: "0"
       - key: VITE_API_URL
         scope: BUILD_TIME
         value: ""

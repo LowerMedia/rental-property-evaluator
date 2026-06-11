@@ -1,18 +1,24 @@
-# RPE-98 — DigitalOcean App Platform spec: STAGE (rpe-staging).
+# RPE-98 — DigitalOcean App Platform spec: STAGE.
 #
-# Create:   doctl apps create --spec .do/app.staging.yaml
-# Update:   doctl apps update <STAGING_APP_ID> --spec .do/app.staging.yaml
+# App ID:   a5f7c0d2-161b-407d-a84f-ca1a594271da (pre-existing legacy stage
+#           app, updated in place 2026-06-11 — kept its name, region, and
+#           the already-attached stage.rentalpropertyevaluator.com domain)
+# Update:   doctl apps update a5f7c0d2-161b-407d-a84f-ca1a594271da --spec .do/app.staging.yaml
 #
 # Stage tracks the CURRENT RELEASE BRANCH — it always shows what ships
 # next. RELEASE RITUAL: when a new release branch is cut (e.g. v1.9.0),
 # bump the two `branch:` fields below and apply. Auto-deploys on every
 # cherry-pick pushed to the release branch.
-#
-# DNS: CNAME stage.rentalpropertyevaluator.com → this app's default
-# ondigitalocean.app hostname (Cloudflare zone), after first create.
 # Dev-tier database (no backups); sandbox mailer (no real email).
-name: rpe-staging
-region: nyc
+# SECRET values are DO-encrypted (EV[...]), sealed to this app — after
+# changing a secret in the console, round-trip `doctl apps spec get`
+# output back here (docs/deploy.md §5).
+name: rental-property-evaluator-stage
+region: sfo
+
+alerts:
+  - rule: DEPLOYMENT_FAILED
+  - rule: DOMAIN_FAILED
 
 domains:
   - domain: stage.rentalpropertyevaluator.com
@@ -84,9 +90,13 @@ services:
       - key: BETTER_AUTH_SECRET
         scope: RUN_TIME
         type: SECRET
+        value: EV[1:OkYkJG1xwm8p7nq5zri51APoJLRmUODd:BWs0jN/Cvh/p+iiqUrsLfT0e4mnQ5VWI6uf4j+ojGLgYu/S3lB3XuGqMnSvDVqjRmcjL63doW7dzGnLL]
+      # HUD_TOKEN is currently an encrypted EMPTY string — set the real
+      # token in the console, then round-trip the new EV value here.
       - key: HUD_TOKEN
         scope: RUN_TIME
         type: SECRET
+        value: EV[1:n+VyEdv3Ve8IAvgyCcZ1KsJOPnqDhu4Q:Y0a+XkkjhScPJqX6QvLLLw==]
 
 static_sites:
   - name: web
@@ -100,6 +110,11 @@ static_sites:
     output_dir: apps/web/dist
     catchall_document: index.html
     envs:
+      # Buildpack provisions pnpm via corepack (packageManager field) —
+      # needs a corepack-bundled Node (engines <25) and no download prompt.
+      - key: COREPACK_ENABLE_DOWNLOAD_PROMPT
+        scope: BUILD_TIME
+        value: "0"
       - key: VITE_API_URL
         scope: BUILD_TIME
         value: ""
