@@ -9,7 +9,7 @@ pnpm 10 monorepo — `packages/engine` (pure calc), `packages/ui` (React 18 SPA)
 Follows the canonical LowerMedia strategy (`~/Library/Mobile Documents/com~apple~CloudDocs/Brain/conventions/git-strategy.md`).
 
 - **Release branch:** `v1.8.0` (current)
-- **Task branches** cut from `v1.6.0`, named exactly after the ticket handle (e.g. `RPE-42`)
+- **Task branches** cut from the current release branch, named exactly after the ticket handle (e.g. `RPE-42`)
 - **Every commit** prefixed with the ticket handle
 - **Jira project:** `RPE` at `lowermedia.atlassian.net` — cloudId `f1fa5126-9e62-47aa-897d-d6ca956bc26c`
 - **Branch/tag ambiguity gotcha:** once a release tag exists, the bare name (e.g. `v1.3.0`) resolves to the *tag*, not the branch — use `refs/heads/vX.X.X` in merge/push/delete commands during the release ship sequence.
@@ -43,6 +43,16 @@ gates ride in `pnpm test` and a red gate blocks the release: the API
 regression suite (apps/api/tests/regression.test.ts) and the E11 auth
 security gate (apps/api/tests/authGate.test.ts) — see
 docs/api-testing.md.
+
+## Deploy
+
+Production is **DigitalOcean App Platform** at `https://rentalpropertyevaluator.com`
+(NOT rpe.lowermedia.net), behind Cloudflare DNS, with alias domains
+`rpe.lowprop.com` and `rpe.goldfinchproperties.com` (RPE-98). Specs live in
+`.do/` (prod tracks `main`, staging tracks `develop`); the api ships via
+`apps/api/Dockerfile`. Runbook: `docs/deploy.md` — read it before touching
+domains, secrets, or the specs. Same-origin constraint: ingress must route
+`/v1` + legacy SPA paths to the api; never split SPA and API across hostnames.
 
 ## Tailwind CSS v4 source scanning
 
