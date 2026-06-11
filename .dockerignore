@@ -1,0 +1,17 @@
+# RPE-98 — keep the Docker build context lean (context = repo root).
+.git
+.github
+.claude
+.superpowers
+docs
+brain
+node_modules
+**/node_modules
+**/dist
+**/.env
+**/.env.local
+**/*.local
+.DS_Store
+# iCloud Drive sync-conflict copies
+* 2.*
+* 2
