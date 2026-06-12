@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- RPE mark (RPE-99): house + upward trend on slate -->
+  <rect width="64" height="64" rx="14" fill="#0f172a"/>
+  <path d="M32 11 L55 30 H48 V53 H16 V30 H9 Z" fill="#f8fafc"/>
+  <path d="M21 45 L29 36 L35 41 L44 31" stroke="#10b981" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M44 31 H36 M44 31 V39" stroke="#10b981" stroke-width="5" fill="none" stroke-linecap="round"/>
+</svg>
