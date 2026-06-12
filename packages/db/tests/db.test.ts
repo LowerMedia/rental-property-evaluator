@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { getTableColumns, getTableName } from 'drizzle-orm';
-import { createDb, resolveDialect, pgSchema, sqliteSchema, appMetaSqlite } from '../src/index';
+import { createDb, resolveDialect, pgSsl, pgSchema, sqliteSchema, appMetaSqlite } from '../src/index';
 
 describe('resolveDialect', () => {
   it('recognizes postgres and sqlite DSNs and rejects garbage', () => {
@@ -16,6 +16,18 @@ describe('resolveDialect', () => {
     expect(resolveDialect('./local.sqlite')).toBe('sqlite');
     expect(() => resolveDialect('mysql://nope')).toThrow(/Unrecognized DATABASE_URL/);
     expect(() => createDb('')).toThrow(/DATABASE_URL is required/);
+  });
+});
+
+describe('pgSsl (DATABASE_CA_CERT plumbing, RPE-98)', () => {
+  it('returns verified-TLS options only when a CA cert is provided', () => {
+    expect(pgSsl(undefined)).toBeUndefined();
+    expect(pgSsl('')).toBeUndefined();
+    expect(pgSsl('   ')).toBeUndefined();
+    expect(pgSsl('-----BEGIN CERTIFICATE-----\nabc')).toEqual({
+      ca: '-----BEGIN CERTIFICATE-----\nabc',
+      rejectUnauthorized: true,
+    });
   });
 });
 
