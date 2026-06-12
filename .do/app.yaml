@@ -1,0 +1,155 @@
+# RPE-98 — DigitalOcean App Platform spec: PRODUCTION (rpe-prod).
+#
+# First creation:   doctl apps create --spec .do/app.yaml   (or console → Apps
+#                   → Create App → import spec). Requires the DO GitHub app to
+#                   be authorized for LowerMedia/rental-property-evaluator.
+# Updates:          doctl apps update <APP_ID> --spec .do/app.yaml
+#
+# Secrets (type: SECRET below) are set once in the console/doctl. After
+# setting them, `doctl apps spec get <APP_ID>` returns the spec with
+# encrypted EV[...] values — paste those back into this file so future
+# spec updates don't clobber the stored secrets. See docs/deploy.md §5.
+#
+# The custom domains are attached at cutover (docs/deploy.md §7): a domain
+# can only belong to one app, and the legacy app holds the primary until
+# DNS flips. Until then, deploy/smoke on the default ondigitalocean.app URL
+# by commenting the domains block out.
+# Region: sfo — matches the legacy prod app (063f8576-…) and dev/stage
+# (verified 2026-06-11).
+name: rpe-prod
+region: sfo
+
+alerts:
+  - rule: DEPLOYMENT_FAILED
+  - rule: DOMAIN_FAILED
+
+domains:
+  - domain: rentalpropertyevaluator.com
+    type: PRIMARY
+  - domain: rpe.lowprop.com
+    type: ALIAS
+  - domain: rpe.goldfinchproperties.com
+    type: ALIAS
+
+databases:
+  # Managed cluster (automated backups) — create it BEFORE first apply:
+  #   doctl databases create rpe-pg --engine pg --version 16 \
+  #     --size db-s-1vcpu-1gb --region sfo3 --num-nodes 1
+  # docs/deploy.md §2. DATABASE_URL is injected via the ${db.DATABASE_URL}
+  # bindable; the api applies drizzle migrations at first connect.
+  - name: db
+    engine: PG
+    version: "16"
+    production: true
+    cluster_name: rpe-pg
+
+ingress:
+  rules:
+    # Versioned public API + cookie-session auth surface (/v1/auth/*).
+    - match: { path: { prefix: /v1 } }
+      component: { name: api, preserve_path_prefix: true }
+    # Legacy unprefixed routes the SPA calls unauthenticated — RPE-75
+    # keeps these open for the browser (apps/api/src/index.ts router).
+    - match: { path: { prefix: /health } }
+      component: { name: api, preserve_path_prefix: true }
+    - match: { path: { prefix: /evaluate } }
+      component: { name: api, preserve_path_prefix: true }
+    - match: { path: { prefix: /property } }
+      component: { name: api, preserve_path_prefix: true }
+    - match: { path: { prefix: /region } }
+      component: { name: api, preserve_path_prefix: true }
+    - match: { path: { prefix: /geocode } }
+      component: { name: api, preserve_path_prefix: true }
+    - match: { path: { prefix: /scrape } }
+      component: { name: api, preserve_path_prefix: true }
+    # Everything else: the SPA (catchall_document handles client routes).
+    - match: { path: { prefix: / } }
+      component: { name: web }
+
+services:
+  - name: api
+    source_dir: /
+    dockerfile_path: apps/api/Dockerfile
+    github:
+      repo: LowerMedia/rental-property-evaluator
+      branch: main # main = release squashes only (git-strategy.md)
+      deploy_on_push: true
+    http_port: 3001
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    health_check:
+      http_path: /v1/health
+      initial_delay_seconds: 15
+      period_seconds: 30
+    envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${db.DATABASE_URL}
+      # DO Postgres presents a CA outside the system trust store —
+      # @rpe/db verifies against this PEM (SELF_SIGNED_CERT_IN_CHAIN fix).
+      - key: DATABASE_CA_CERT
+        scope: RUN_TIME
+        value: ${db.CA_CERT}
+      - key: RPE_API_KEYS_SOURCE
+        scope: RUN_TIME
+        value: db
+      - key: RPE_AUTH_BASE_URL
+        scope: RUN_TIME
+        value: https://rentalpropertyevaluator.com
+      - key: RPE_AUTH_TRUSTED_ORIGINS
+        scope: RUN_TIME
+        value: https://rentalpropertyevaluator.com,https://rpe.lowprop.com,https://rpe.goldfinchproperties.com
+      - key: RPE_CORS_ORIGINS
+        scope: RUN_TIME
+        value: https://rentalpropertyevaluator.com,https://rpe.lowprop.com,https://rpe.goldfinchproperties.com
+      - key: RPE_REQUIRE_EMAIL_VERIFICATION
+        scope: RUN_TIME
+        value: "true"
+      - key: RPE_MAIL_PROVIDER
+        scope: RUN_TIME
+        value: resend
+      - key: RPE_MAIL_FROM
+        scope: RUN_TIME
+        value: "Rental Property Evaluator <noreply@rentalpropertyevaluator.com>"
+      # ── secrets: set values in console/doctl, never commit raw ──
+      - key: BETTER_AUTH_SECRET
+        scope: RUN_TIME
+        type: SECRET
+      - key: RESEND_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: HUD_TOKEN
+        scope: RUN_TIME
+        type: SECRET
+
+static_sites:
+  - name: web
+    source_dir: /
+    github:
+      repo: LowerMedia/rental-property-evaluator
+      branch: main
+      deploy_on_push: true
+    environment_slug: node-js
+    build_command: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @rpe/web build
+    output_dir: apps/web/dist
+    catchall_document: index.html
+    envs:
+      # Buildpack provisions pnpm via corepack (packageManager field) —
+      # needs a corepack-bundled Node (engines <25) and no download prompt.
+      - key: COREPACK_ENABLE_DOWNLOAD_PROMPT
+        scope: BUILD_TIME
+        value: "0"
+      # Same-origin API: ingress routes /v1 + the legacy SPA paths to the
+      # api service, so the SPA fetches relative URLs (empty = relative).
+      - key: VITE_API_URL
+        scope: BUILD_TIME
+        value: ""
+      - key: VITE_AUTH_ENABLED
+        scope: BUILD_TIME
+        value: "true"
+      # Ads stay off until the AdSense flip (post-cutover): set true +
+      # real slot id here, then redeploy. Client id is committed in
+      # apps/web/.env.production (the property approved for this domain).
+      - key: VITE_ADS_ENABLED
+        scope: BUILD_TIME
+        value: "false"

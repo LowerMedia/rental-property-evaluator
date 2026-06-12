@@ -8,8 +8,8 @@ pnpm 10 monorepo — `packages/engine` (pure calc), `packages/ui` (React 18 SPA)
 
 Follows the canonical LowerMedia strategy (`~/Library/Mobile Documents/com~apple~CloudDocs/Brain/conventions/git-strategy.md`).
 
-- **Release branch:** `v1.7.0` (current)
-- **Task branches** cut from `v1.6.0`, named exactly after the ticket handle (e.g. `RPE-42`)
+- **Release branch:** `v1.8.0` (current)
+- **Task branches** cut from the current release branch, named exactly after the ticket handle (e.g. `RPE-42`)
 - **Every commit** prefixed with the ticket handle
 - **Jira project:** `RPE` at `lowermedia.atlassian.net` — cloudId `f1fa5126-9e62-47aa-897d-d6ca956bc26c`
 - **Branch/tag ambiguity gotcha:** once a release tag exists, the bare name (e.g. `v1.3.0`) resolves to the *tag*, not the branch — use `refs/heads/vX.X.X` in merge/push/delete commands during the release ship sequence.
@@ -26,6 +26,7 @@ Follows the canonical LowerMedia strategy (`~/Library/Mobile Documents/com~apple
 | v1.4.0  | `v1.4.0` | E7 complete (tiered import) + Example deal, light/dark theme, score explanation (see `docs/releases/v1.4.0.md`) |
 | v1.5.0  | `v1.5.0` | E10 Phase 1: public /v1 REST API — auth, rate limits, reports (json/csv/pdf), OpenAPI, hardening, regression gate (see `docs/releases/v1.5.0.md`) |
 | v1.6.0  | `v1.6.0` | E11 complete: auth & multi-tenant accounts — better-auth + Drizzle, sessions, registration/verification, lockout, reset, orgs/RBAC, auth UI, security gate (see `docs/releases/v1.6.0.md`) |
+| v1.7.0  | `v1.7.0` | E10 Phase 2: stored deals — org-scoped /v1/deals CRUD + cached report retrieval, DB-backed API keys with env migration (see `docs/releases/v1.7.0.md`) |
 
 ### Copilot review loop
 
@@ -37,11 +38,23 @@ Origin is configured at `github.com:LowerMedia/rental-property-evaluator`. Full 
 pnpm lint && pnpm typecheck && pnpm test && pnpm build
 ```
 
-All four must pass. Tests currently: 941 tests, 64 files. Two release
+All four must pass. Tests currently: 956 tests, 67 files. Two release
 gates ride in `pnpm test` and a red gate blocks the release: the API
 regression suite (apps/api/tests/regression.test.ts) and the E11 auth
 security gate (apps/api/tests/authGate.test.ts) — see
 docs/api-testing.md.
+
+## Deploy
+
+Production is **DigitalOcean App Platform** at `https://rentalpropertyevaluator.com`
+(NOT rpe.lowermedia.net), behind Cloudflare DNS, with alias domains
+`rpe.lowprop.com` and `rpe.goldfinchproperties.com` (RPE-98). Specs live in
+`.do/`: prod tracks `main`, `stage.rentalpropertyevaluator.com` tracks the
+current release branch (bump `app.staging.yaml` on each release cut),
+`dev.rentalpropertyevaluator.com` tracks `develop`. The api ships via
+`apps/api/Dockerfile`. Runbook: `docs/deploy.md` — read it before touching
+domains, secrets, or the specs. Same-origin constraint: ingress must route
+`/v1` + legacy SPA paths to the api; never split SPA and API across hostnames.
 
 ## Tailwind CSS v4 source scanning
 

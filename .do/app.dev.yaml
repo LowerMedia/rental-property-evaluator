@@ -1,0 +1,132 @@
+# RPE-98 — DigitalOcean App Platform spec: DEV.
+#
+# App ID:   4e7dd243-c8f4-4061-9f55-7db4f05b661c (pre-existing legacy dev
+#           app, updated in place 2026-06-11 — kept its name, region, and
+#           the already-attached dev.rentalpropertyevaluator.com domain)
+# Update:   doctl apps update 4e7dd243-c8f4-4061-9f55-7db4f05b661c --spec .do/app.dev.yaml
+#
+# Dev tracks `develop` — every merged task auto-deploys here, the
+# integration view ahead of stage (release branch) and prod (main).
+# Dev-tier database (no backups); sandbox mailer (no real email).
+# SECRET values are DO-encrypted (EV[...]), sealed to this app — after
+# changing a secret in the console, round-trip `doctl apps spec get`
+# output back here (docs/deploy.md §5).
+name: rental-property-evaluator-dev
+region: sfo
+
+alerts:
+  - rule: DEPLOYMENT_FAILED
+  - rule: DOMAIN_FAILED
+
+domains:
+  - domain: dev.rentalpropertyevaluator.com
+    type: PRIMARY
+
+databases:
+  # Dev-tier database (no cluster_name → $7 dev PG, no backups).
+  - name: db
+    engine: PG
+    version: "16"
+
+ingress:
+  rules:
+    - match: { path: { prefix: /v1 } }
+      component: { name: api, preserve_path_prefix: true }
+    - match: { path: { prefix: /health } }
+      component: { name: api, preserve_path_prefix: true }
+    - match: { path: { prefix: /evaluate } }
+      component: { name: api, preserve_path_prefix: true }
+    - match: { path: { prefix: /property } }
+      component: { name: api, preserve_path_prefix: true }
+    - match: { path: { prefix: /region } }
+      component: { name: api, preserve_path_prefix: true }
+    - match: { path: { prefix: /geocode } }
+      component: { name: api, preserve_path_prefix: true }
+    - match: { path: { prefix: /scrape } }
+      component: { name: api, preserve_path_prefix: true }
+    - match: { path: { prefix: / } }
+      component: { name: web }
+
+services:
+  - name: api
+    source_dir: /
+    dockerfile_path: apps/api/Dockerfile
+    github:
+      repo: LowerMedia/rental-property-evaluator
+      branch: develop
+      deploy_on_push: true
+    http_port: 3001
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    health_check:
+      http_path: /v1/health
+      initial_delay_seconds: 15
+      period_seconds: 30
+    envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${db.DATABASE_URL}
+      # DO Postgres presents a CA outside the system trust store —
+      # @rpe/db verifies against this PEM (SELF_SIGNED_CERT_IN_CHAIN fix).
+      - key: DATABASE_CA_CERT
+        scope: RUN_TIME
+        value: ${db.CA_CERT}
+      # Dev-tier DBs don't deliver a resolvable CA via the bindable —
+      # encrypted-but-unverified TLS (in-VPC). Auto-upgrades to verified
+      # if the CA bindable ever resolves. Never set on prod.
+      - key: DATABASE_SSL_NO_VERIFY
+        scope: RUN_TIME
+        value: "true"
+      - key: RPE_API_KEYS_SOURCE
+        scope: RUN_TIME
+        value: db
+      - key: RPE_AUTH_BASE_URL
+        scope: RUN_TIME
+        value: ${APP_URL}
+      - key: RPE_AUTH_TRUSTED_ORIGINS
+        scope: RUN_TIME
+        value: ${APP_URL}
+      - key: RPE_CORS_ORIGINS
+        scope: RUN_TIME
+        value: ${APP_URL}
+      # Sandbox mailer by default — see the note in app.staging.yaml.
+      - key: RPE_REQUIRE_EMAIL_VERIFICATION
+        scope: RUN_TIME
+        value: "false"
+      - key: BETTER_AUTH_SECRET
+        scope: RUN_TIME
+        type: SECRET
+        value: EV[1:XpVT0JO+RNBfio9Fz6q/TPbX05r9MqtZ:0SQ8eYshVTkeEBGhOcVA/lcuiaonHIzH4/t79wvPDxTqrlPCQ3i/xYFyISmr4iQmmACI5BFU1fPh/to6]
+      # HUD_TOKEN is currently an encrypted EMPTY string — set the real
+      # token in the console, then round-trip the new EV value here.
+      - key: HUD_TOKEN
+        scope: RUN_TIME
+        type: SECRET
+        value: EV[1:hqRa6JU8A7rI4BYv+2Xdhxm3VnjGDi5f:vDFFfrXuHsKxg4IW10XSVg==]
+
+static_sites:
+  - name: web
+    source_dir: /
+    github:
+      repo: LowerMedia/rental-property-evaluator
+      branch: develop
+      deploy_on_push: true
+    environment_slug: node-js
+    build_command: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @rpe/web build
+    output_dir: apps/web/dist
+    catchall_document: index.html
+    envs:
+      # Buildpack provisions pnpm via corepack (packageManager field) —
+      # needs a corepack-bundled Node (engines <25) and no download prompt.
+      - key: COREPACK_ENABLE_DOWNLOAD_PROMPT
+        scope: BUILD_TIME
+        value: "0"
+      - key: VITE_API_URL
+        scope: BUILD_TIME
+        value: ""
+      - key: VITE_AUTH_ENABLED
+        scope: BUILD_TIME
+        value: "true"
+      - key: VITE_ADS_ENABLED
+        scope: BUILD_TIME
+        value: "false"

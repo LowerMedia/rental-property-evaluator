@@ -1,0 +1,140 @@
+# RPE-98 — DigitalOcean App Platform spec: STAGE.
+#
+# App ID:   7ffc325a-5d08-413c-8d4a-d3ddd615293a — RECREATED 2026-06-12:
+#           the legacy app was pinned to DO's old build system
+#           (digitalocean/node 0.5.0, no corepack/pnpm support); fresh
+#           apps get the new chain (nodejs-appdetect + heroku/nodejs).
+#           Default hostname: rental-property-evaluator-stage-r8oy4.ondigitalocean.app
+#           (the stage. CNAME in Cloudflare must point HERE).
+# Update:   doctl apps update 7ffc325a-5d08-413c-8d4a-d3ddd615293a --spec .do/app.staging.yaml
+#
+# Stage tracks the CURRENT RELEASE BRANCH — it always shows what ships
+# next. RELEASE RITUAL: when a new release branch is cut (e.g. v1.9.0),
+# bump the two `branch:` fields below and apply. Auto-deploys on every
+# cherry-pick pushed to the release branch.
+# Dev-tier database (no backups); sandbox mailer (no real email).
+# SECRET values are DO-encrypted (EV[...]), sealed to this app — after
+# changing a secret in the console, round-trip `doctl apps spec get`
+# output back here (docs/deploy.md §5).
+name: rental-property-evaluator-stage
+region: sfo
+
+alerts:
+  - rule: DEPLOYMENT_FAILED
+  - rule: DOMAIN_FAILED
+
+domains:
+  - domain: stage.rentalpropertyevaluator.com
+    type: PRIMARY
+
+databases:
+  # Dev-tier database (no cluster_name → $7 dev PG, no backups).
+  - name: db
+    engine: PG
+    version: "16"
+
+ingress:
+  rules:
+    - match: { path: { prefix: /v1 } }
+      component: { name: api, preserve_path_prefix: true }
+    - match: { path: { prefix: /health } }
+      component: { name: api, preserve_path_prefix: true }
+    - match: { path: { prefix: /evaluate } }
+      component: { name: api, preserve_path_prefix: true }
+    - match: { path: { prefix: /property } }
+      component: { name: api, preserve_path_prefix: true }
+    - match: { path: { prefix: /region } }
+      component: { name: api, preserve_path_prefix: true }
+    - match: { path: { prefix: /geocode } }
+      component: { name: api, preserve_path_prefix: true }
+    - match: { path: { prefix: /scrape } }
+      component: { name: api, preserve_path_prefix: true }
+    - match: { path: { prefix: / } }
+      component: { name: web }
+
+services:
+  - name: api
+    source_dir: /
+    dockerfile_path: apps/api/Dockerfile
+    github:
+      repo: LowerMedia/rental-property-evaluator
+      branch: v1.8.0 # ← bump when the next release branch is cut
+      deploy_on_push: true
+    http_port: 3001
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    health_check:
+      http_path: /v1/health
+      initial_delay_seconds: 15
+      period_seconds: 30
+    envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${db.DATABASE_URL}
+      # DO Postgres presents a CA outside the system trust store —
+      # @rpe/db verifies against this PEM (SELF_SIGNED_CERT_IN_CHAIN fix).
+      - key: DATABASE_CA_CERT
+        scope: RUN_TIME
+        value: ${db.CA_CERT}
+      # Dev-tier DBs don't deliver a resolvable CA via the bindable —
+      # encrypted-but-unverified TLS (in-VPC). Auto-upgrades to verified
+      # if the CA bindable ever resolves. Never set on prod.
+      - key: DATABASE_SSL_NO_VERIFY
+        scope: RUN_TIME
+        value: "true"
+      - key: RPE_API_KEYS_SOURCE
+        scope: RUN_TIME
+        value: db
+      - key: RPE_AUTH_BASE_URL
+        scope: RUN_TIME
+        value: ${APP_URL}
+      - key: RPE_AUTH_TRUSTED_ORIGINS
+        scope: RUN_TIME
+        value: ${APP_URL}
+      - key: RPE_CORS_ORIGINS
+        scope: RUN_TIME
+        value: ${APP_URL}
+      # Sandbox mailer by default (no RPE_MAIL_PROVIDER set): stage never
+      # sends real email, so verification is off. To exercise the real
+      # email flow here, add RPE_MAIL_PROVIDER=resend + the RESEND_API_KEY
+      # secret + RPE_MAIL_FROM and flip this to "true".
+      - key: RPE_REQUIRE_EMAIL_VERIFICATION
+        scope: RUN_TIME
+        value: "false"
+      - key: BETTER_AUTH_SECRET
+        scope: RUN_TIME
+        type: SECRET
+        value: EV[1:CcPcrY7PuhHIMkQYnBOgqwVgdaOTFicY:rcRZMPCryfooZBVk74abhDWyFgUOG26wak/jejjkVBoWwCFMCC6iSecPTHwi5nJXuO5JypGF5sj9N81K]
+      # HUD_TOKEN is currently an encrypted EMPTY string — set the real
+      # token in the console, then round-trip the new EV value here.
+      - key: HUD_TOKEN
+        scope: RUN_TIME
+        type: SECRET
+        value: EV[1:uD2gVQMx3ZiYo6y8AlKL/IV7+P84zQAk:XQ5fF27DM85SLD/dcEsl9w==]
+
+static_sites:
+  - name: web
+    source_dir: /
+    github:
+      repo: LowerMedia/rental-property-evaluator
+      branch: v1.8.0 # ← bump when the next release branch is cut
+      deploy_on_push: true
+    environment_slug: node-js
+    build_command: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @rpe/web build
+    output_dir: apps/web/dist
+    catchall_document: index.html
+    envs:
+      # Buildpack provisions pnpm via corepack (packageManager field) —
+      # needs a corepack-bundled Node (engines <25) and no download prompt.
+      - key: COREPACK_ENABLE_DOWNLOAD_PROMPT
+        scope: BUILD_TIME
+        value: "0"
+      - key: VITE_API_URL
+        scope: BUILD_TIME
+        value: ""
+      - key: VITE_AUTH_ENABLED
+        scope: BUILD_TIME
+        value: "true"
+      - key: VITE_ADS_ENABLED
+        scope: BUILD_TIME
+        value: "false"

@@ -5,3 +5,7 @@ dist
 *.local
 .DS_Store
 .superpowers/
+
+# iCloud Drive sync-conflict copies ("file 2.ext") — never commit
+* 2.*
+* 2
