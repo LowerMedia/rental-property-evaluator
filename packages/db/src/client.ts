@@ -104,6 +104,19 @@ export function pgSsl(
   return undefined;
 }
 
+/**
+ * node-postgres DISCARDS a config-object `ssl` whenever the connection
+ * string carries an `sslmode`/`ssl` query param (the URL's parsed ssl
+ * wins — verified against pg 8.21). When pgSsl() supplies options, the
+ * params must be stripped so the config object is authoritative.
+ */
+export function stripUrlSslParams(url: string): string {
+  const u = new URL(url);
+  u.searchParams.delete('sslmode');
+  u.searchParams.delete('ssl');
+  return u.toString();
+}
+
 /** Create a client for the given DSN (defaults to env DATABASE_URL). */
 export function createDb(url: string | undefined = process.env['DATABASE_URL']): RpeDb {
   if (url === undefined || url.trim() === '') {
@@ -117,7 +130,10 @@ export function createDb(url: string | undefined = process.env['DATABASE_URL']):
     if (ssl !== undefined && ssl.rejectUnauthorized === false) {
       console.warn('@rpe/db: postgres TLS verification DISABLED (DATABASE_SSL_NO_VERIFY) — dev/stage only');
     }
-    const pool = new pg.Pool({ connectionString: url, ...(ssl === undefined ? {} : { ssl }) });
+    const pool =
+      ssl === undefined
+        ? new pg.Pool({ connectionString: url })
+        : new pg.Pool({ connectionString: stripUrlSslParams(url), ssl });
     const db = drizzlePg(pool, { schema: pgSchema });
     return {
       dialect,
