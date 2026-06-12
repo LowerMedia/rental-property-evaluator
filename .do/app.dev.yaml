@@ -31,19 +31,19 @@ databases:
 ingress:
   rules:
     - match: { path: { prefix: /v1 } }
-      component: { name: api }
+      component: { name: api, preserve_path_prefix: true }
     - match: { path: { prefix: /health } }
-      component: { name: api }
+      component: { name: api, preserve_path_prefix: true }
     - match: { path: { prefix: /evaluate } }
-      component: { name: api }
+      component: { name: api, preserve_path_prefix: true }
     - match: { path: { prefix: /property } }
-      component: { name: api }
+      component: { name: api, preserve_path_prefix: true }
     - match: { path: { prefix: /region } }
-      component: { name: api }
+      component: { name: api, preserve_path_prefix: true }
     - match: { path: { prefix: /geocode } }
-      component: { name: api }
+      component: { name: api, preserve_path_prefix: true }
     - match: { path: { prefix: /scrape } }
-      component: { name: api }
+      component: { name: api, preserve_path_prefix: true }
     - match: { path: { prefix: / } }
       component: { name: web }
 
