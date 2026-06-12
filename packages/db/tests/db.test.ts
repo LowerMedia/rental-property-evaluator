@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { getTableColumns, getTableName } from 'drizzle-orm';
-import { createDb, resolveDialect, pgSsl, pgSchema, sqliteSchema, appMetaSqlite } from '../src/index';
+import { createDb, resolveDialect, pgSsl, stripUrlSslParams, pgSchema, sqliteSchema, appMetaSqlite } from '../src/index';
 
 describe('resolveDialect', () => {
   it('recognizes postgres and sqlite DSNs and rejects garbage', () => {
@@ -28,6 +28,12 @@ describe('pgSsl (DATABASE_CA_CERT / DATABASE_SSL_NO_VERIFY plumbing, RPE-98)', (
       ca: '-----BEGIN CERTIFICATE-----\nabc',
       rejectUnauthorized: true,
     });
+  });
+
+  it('strips sslmode/ssl params so config-object ssl stays authoritative (pg discards it otherwise)', () => {
+    expect(stripUrlSslParams('postgres://u:p@h:25060/db?sslmode=require')).toBe('postgres://u:p@h:25060/db');
+    expect(stripUrlSslParams('postgres://u:p@h/db?a=1&sslmode=require&ssl=true')).toBe('postgres://u:p@h/db?a=1');
+    expect(stripUrlSslParams('postgres://u:p@h/db')).toBe('postgres://u:p@h/db');
   });
 
   it('falls back to encrypted-unverified only when explicitly flagged', () => {
