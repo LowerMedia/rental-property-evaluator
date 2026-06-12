@@ -23,7 +23,7 @@ Specs (one app per branch tier, mirroring the git strategy):
 | Spec | App | Tracks | Hostname |
 |---|---|---|---|
 | [.do/app.yaml](../.do/app.yaml) | rpe-prod (created at cutover) | `main` (releases) | rentalpropertyevaluator.com + aliases |
-| [.do/app.staging.yaml](../.do/app.staging.yaml) | rental-property-evaluator-stage `a5f7c0d2-…` | current release branch (`v1.8.0` — **bump on each release cut**) | stage.rentalpropertyevaluator.com |
+| [.do/app.staging.yaml](../.do/app.staging.yaml) | rental-property-evaluator-stage `7ffc325a-…` (recreated 2026-06-12 — legacy app was pinned to the old build system) | current release branch (`v1.8.0` — **bump on each release cut**) | stage.rentalpropertyevaluator.com |
 | [.do/app.dev.yaml](../.do/app.dev.yaml) | rental-property-evaluator-dev `4e7dd243-…` | `develop` (every merged task) | dev.rentalpropertyevaluator.com |
 
 All apps live in **sfo** (the legacy apps' region — verified 2026-06-11).
@@ -90,7 +90,7 @@ they kept their names, app IDs, domains, certs, and DNS. To change them:
 
 ```bash
 doctl apps update 4e7dd243-c8f4-4061-9f55-7db4f05b661c --spec .do/app.dev.yaml
-doctl apps update a5f7c0d2-161b-407d-a84f-ca1a594271da --spec .do/app.staging.yaml
+doctl apps update 7ffc325a-5d08-413c-8d4a-d3ddd615293a --spec .do/app.staging.yaml
 ```
 
 `BETTER_AUTH_SECRET` is set (committed as encrypted EV values);
@@ -146,7 +146,7 @@ zones (wherever their DNS is hosted).
 | `rentalpropertyevaluator.com` (apex, CNAME-flattened) | rentalpropertyevaluator.com | `<rpe-prod>.ondigitalocean.app` |
 | `rpe.lowprop.com` CNAME | lowprop.com | `<rpe-prod>.ondigitalocean.app` |
 | `rpe.goldfinchproperties.com` CNAME | goldfinchproperties.com | `<rpe-prod>.ondigitalocean.app` |
-| `stage.rentalpropertyevaluator.com` CNAME (already in place) | rentalpropertyevaluator.com | `rental-property-evaluator-stage-cg55a.ondigitalocean.app` |
+| `stage.rentalpropertyevaluator.com` CNAME (**update — app recreated 2026-06-12**) | rentalpropertyevaluator.com | `rental-property-evaluator-stage-r8oy4.ondigitalocean.app` |
 | `dev.rentalpropertyevaluator.com` CNAME (already in place) | rentalpropertyevaluator.com | `rental-property-evaluator-dev-uv7fo.ondigitalocean.app` |
 
 Certificate issuance: App Platform issues Let's Encrypt certs per

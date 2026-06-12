@@ -1,9 +1,12 @@
 # RPE-98 — DigitalOcean App Platform spec: STAGE.
 #
-# App ID:   a5f7c0d2-161b-407d-a84f-ca1a594271da (pre-existing legacy stage
-#           app, updated in place 2026-06-11 — kept its name, region, and
-#           the already-attached stage.rentalpropertyevaluator.com domain)
-# Update:   doctl apps update a5f7c0d2-161b-407d-a84f-ca1a594271da --spec .do/app.staging.yaml
+# App ID:   7ffc325a-5d08-413c-8d4a-d3ddd615293a — RECREATED 2026-06-12:
+#           the legacy app was pinned to DO's old build system
+#           (digitalocean/node 0.5.0, no corepack/pnpm support); fresh
+#           apps get the new chain (nodejs-appdetect + heroku/nodejs).
+#           Default hostname: rental-property-evaluator-stage-r8oy4.ondigitalocean.app
+#           (the stage. CNAME in Cloudflare must point HERE).
+# Update:   doctl apps update 7ffc325a-5d08-413c-8d4a-d3ddd615293a --spec .do/app.staging.yaml
 #
 # Stage tracks the CURRENT RELEASE BRANCH — it always shows what ships
 # next. RELEASE RITUAL: when a new release branch is cut (e.g. v1.9.0),
@@ -101,13 +104,13 @@ services:
       - key: BETTER_AUTH_SECRET
         scope: RUN_TIME
         type: SECRET
-        value: EV[1:OkYkJG1xwm8p7nq5zri51APoJLRmUODd:BWs0jN/Cvh/p+iiqUrsLfT0e4mnQ5VWI6uf4j+ojGLgYu/S3lB3XuGqMnSvDVqjRmcjL63doW7dzGnLL]
+        value: EV[1:CcPcrY7PuhHIMkQYnBOgqwVgdaOTFicY:rcRZMPCryfooZBVk74abhDWyFgUOG26wak/jejjkVBoWwCFMCC6iSecPTHwi5nJXuO5JypGF5sj9N81K]
       # HUD_TOKEN is currently an encrypted EMPTY string — set the real
       # token in the console, then round-trip the new EV value here.
       - key: HUD_TOKEN
         scope: RUN_TIME
         type: SECRET
-        value: EV[1:n+VyEdv3Ve8IAvgyCcZ1KsJOPnqDhu4Q:Y0a+XkkjhScPJqX6QvLLLw==]
+        value: EV[1:uD2gVQMx3ZiYo6y8AlKL/IV7+P84zQAk:XQ5fF27DM85SLD/dcEsl9w==]
 
 static_sites:
   - name: web
