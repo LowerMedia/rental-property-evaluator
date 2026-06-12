@@ -78,6 +78,21 @@ export function resolveDialect(url: string): Dialect {
   );
 }
 
+/**
+ * TLS options for managed Postgres (RPE-98). DigitalOcean databases
+ * present a CA that is not in the system trust store — node-postgres
+ * then fails with SELF_SIGNED_CERT_IN_CHAIN. Deploys inject the PEM via
+ * DATABASE_CA_CERT (App Platform's `${db.CA_CERT}` bindable); when
+ * present, the pool verifies against it explicitly. When absent, pg's
+ * default URL-driven TLS behavior applies (local/CI).
+ */
+export function pgSsl(
+  caCert: string | undefined = process.env['DATABASE_CA_CERT'],
+): { ca: string; rejectUnauthorized: true } | undefined {
+  if (caCert === undefined || caCert.trim() === '') return undefined;
+  return { ca: caCert, rejectUnauthorized: true };
+}
+
 /** Create a client for the given DSN (defaults to env DATABASE_URL). */
 export function createDb(url: string | undefined = process.env['DATABASE_URL']): RpeDb {
   if (url === undefined || url.trim() === '') {
@@ -87,7 +102,8 @@ export function createDb(url: string | undefined = process.env['DATABASE_URL']):
   const dialect = resolveDialect(url);
 
   if (dialect === 'postgres') {
-    const pool = new pg.Pool({ connectionString: url });
+    const ssl = pgSsl();
+    const pool = new pg.Pool({ connectionString: url, ...(ssl === undefined ? {} : { ssl }) });
     const db = drizzlePg(pool, { schema: pgSchema });
     return {
       dialect,

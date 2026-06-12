@@ -85,6 +85,11 @@ services:
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
+      # DO Postgres presents a CA outside the system trust store —
+      # @rpe/db verifies against this PEM (SELF_SIGNED_CERT_IN_CHAIN fix).
+      - key: DATABASE_CA_CERT
+        scope: RUN_TIME
+        value: ${db.CA_CERT}
       - key: RPE_API_KEYS_SOURCE
         scope: RUN_TIME
         value: db
