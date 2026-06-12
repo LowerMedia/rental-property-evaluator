@@ -19,12 +19,24 @@ describe('resolveDialect', () => {
   });
 });
 
-describe('pgSsl (DATABASE_CA_CERT plumbing, RPE-98)', () => {
-  it('returns verified-TLS options only when a CA cert is provided', () => {
-    expect(pgSsl(undefined)).toBeUndefined();
-    expect(pgSsl('')).toBeUndefined();
-    expect(pgSsl('   ')).toBeUndefined();
-    expect(pgSsl('-----BEGIN CERTIFICATE-----\nabc')).toEqual({
+describe('pgSsl (DATABASE_CA_CERT / DATABASE_SSL_NO_VERIFY plumbing, RPE-98)', () => {
+  it('verifies against a real PEM and ignores non-PEM values', () => {
+    expect(pgSsl(undefined, undefined)).toBeUndefined();
+    expect(pgSsl('', undefined)).toBeUndefined();
+    expect(pgSsl('${db.CA_CERT}', undefined)).toBeUndefined(); // unresolved bindable literal
+    expect(pgSsl('-----BEGIN CERTIFICATE-----\nabc', undefined)).toEqual({
+      ca: '-----BEGIN CERTIFICATE-----\nabc',
+      rejectUnauthorized: true,
+    });
+  });
+
+  it('falls back to encrypted-unverified only when explicitly flagged', () => {
+    expect(pgSsl(undefined, 'true')).toEqual({ rejectUnauthorized: false });
+    expect(pgSsl(undefined, '1')).toEqual({ rejectUnauthorized: false });
+    expect(pgSsl(undefined, 'false')).toBeUndefined();
+    expect(pgSsl('${db.CA_CERT}', 'true')).toEqual({ rejectUnauthorized: false });
+    // a real CA always wins over the no-verify flag
+    expect(pgSsl('-----BEGIN CERTIFICATE-----\nabc', 'true')).toEqual({
       ca: '-----BEGIN CERTIFICATE-----\nabc',
       rejectUnauthorized: true,
     });

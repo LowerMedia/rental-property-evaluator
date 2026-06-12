@@ -71,6 +71,12 @@ services:
       - key: DATABASE_CA_CERT
         scope: RUN_TIME
         value: ${db.CA_CERT}
+      # Dev-tier DBs don't deliver a resolvable CA via the bindable —
+      # encrypted-but-unverified TLS (in-VPC). Auto-upgrades to verified
+      # if the CA bindable ever resolves. Never set on prod.
+      - key: DATABASE_SSL_NO_VERIFY
+        scope: RUN_TIME
+        value: "true"
       - key: RPE_API_KEYS_SOURCE
         scope: RUN_TIME
         value: db
