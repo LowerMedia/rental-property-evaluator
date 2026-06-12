@@ -18,9 +18,10 @@ import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
+import { sql } from 'drizzle-orm';
 import { drizzle as drizzlePg, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { drizzle as drizzleSqlite, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
-import { migrate as migratePg } from 'drizzle-orm/node-postgres/migrator';
+import { readMigrationFiles } from 'drizzle-orm/migrator';
 import { migrate as migrateSqlite } from 'drizzle-orm/better-sqlite3/migrator';
 import pg from 'pg';
 import { pgSchema } from './schema.pg.js';
@@ -117,6 +118,47 @@ export function stripUrlSslParams(url: string): string {
   return u.toString();
 }
 
+/**
+ * Drizzle's stock pg migrator unconditionally runs
+ * `CREATE SCHEMA IF NOT EXISTS <journal schema>` — and postgres checks
+ * the CREATE privilege BEFORE the IF NOT EXISTS short-circuit, so
+ * DO-injected DB users (no CREATE on the database, 42501) can never run
+ * it, regardless of `migrationsSchema`. This is drizzle's loop verbatim
+ * (same readMigrationFiles parsing, same hash/timestamp journal
+ * semantics, all pending migrations in one transaction) minus the
+ * schema bootstrap — the journal table lives in `public`.
+ */
+async function migratePgWithoutSchemaCreate(
+  db: NodePgDatabase<typeof pgSchema>,
+  migrationsFolder: string,
+): Promise<void> {
+  const migrations = readMigrationFiles({ migrationsFolder });
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "public"."__drizzle_migrations" (
+      id SERIAL PRIMARY KEY,
+      hash text NOT NULL,
+      created_at bigint
+    )
+  `);
+  const last = (
+    await db.execute(
+      sql`select id, hash, created_at from "public"."__drizzle_migrations" order by created_at desc limit 1`,
+    )
+  ).rows[0] as { created_at: string | number } | undefined;
+  await db.transaction(async (tx) => {
+    for (const migration of migrations) {
+      if (last === undefined || Number(last.created_at) < migration.folderMillis) {
+        for (const stmt of migration.sql) {
+          await tx.execute(sql.raw(stmt));
+        }
+        await tx.execute(
+          sql`insert into "public"."__drizzle_migrations" ("hash", "created_at") values (${migration.hash}, ${migration.folderMillis})`,
+        );
+      }
+    }
+  });
+}
+
 /** Create a client for the given DSN (defaults to env DATABASE_URL). */
 export function createDb(url: string | undefined = process.env['DATABASE_URL']): RpeDb {
   if (url === undefined || url.trim() === '') {
@@ -139,7 +181,7 @@ export function createDb(url: string | undefined = process.env['DATABASE_URL']):
       dialect,
       pg: db,
       applyMigrations: async () => {
-        await migratePg(db, { migrationsFolder: `${MIGRATIONS_DIR}/pg` });
+        await migratePgWithoutSchemaCreate(db, `${MIGRATIONS_DIR}/pg`);
       },
       close: () => pool.end(),
     };
