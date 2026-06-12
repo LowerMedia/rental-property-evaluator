@@ -81,16 +81,27 @@ export function resolveDialect(url: string): Dialect {
 /**
  * TLS options for managed Postgres (RPE-98). DigitalOcean databases
  * present a CA that is not in the system trust store — node-postgres
- * then fails with SELF_SIGNED_CERT_IN_CHAIN. Deploys inject the PEM via
- * DATABASE_CA_CERT (App Platform's `${db.CA_CERT}` bindable); when
- * present, the pool verifies against it explicitly. When absent, pg's
- * default URL-driven TLS behavior applies (local/CI).
+ * then fails with SELF_SIGNED_CERT_IN_CHAIN. Tiered config:
+ *
+ *   1. DATABASE_CA_CERT holds a real PEM (App Platform `${db.CA_CERT}`
+ *      bindable on managed clusters) → verified TLS against that CA.
+ *      A PEM sniff guards against unresolved `${…}` literals.
+ *   2. DATABASE_SSL_NO_VERIFY=true (dev-tier App Platform databases,
+ *      which don't expose a resolvable CA bindable) → encrypted but
+ *      unverified TLS. In-VPC dev/stage only — never prod.
+ *   3. Neither → pg's default URL-driven behavior (local/CI).
  */
 export function pgSsl(
   caCert: string | undefined = process.env['DATABASE_CA_CERT'],
-): { ca: string; rejectUnauthorized: true } | undefined {
-  if (caCert === undefined || caCert.trim() === '') return undefined;
-  return { ca: caCert, rejectUnauthorized: true };
+  noVerify: string | undefined = process.env['DATABASE_SSL_NO_VERIFY'],
+): { ca: string; rejectUnauthorized: true } | { rejectUnauthorized: false } | undefined {
+  if (caCert !== undefined && caCert.includes('BEGIN CERTIFICATE')) {
+    return { ca: caCert, rejectUnauthorized: true };
+  }
+  if (noVerify === 'true' || noVerify === '1') {
+    return { rejectUnauthorized: false };
+  }
+  return undefined;
 }
 
 /** Create a client for the given DSN (defaults to env DATABASE_URL). */
@@ -103,6 +114,9 @@ export function createDb(url: string | undefined = process.env['DATABASE_URL']):
 
   if (dialect === 'postgres') {
     const ssl = pgSsl();
+    if (ssl !== undefined && ssl.rejectUnauthorized === false) {
+      console.warn('@rpe/db: postgres TLS verification DISABLED (DATABASE_SSL_NO_VERIFY) — dev/stage only');
+    }
     const pool = new pg.Pool({ connectionString: url, ...(ssl === undefined ? {} : { ssl }) });
     const db = drizzlePg(pool, { schema: pgSchema });
     return {

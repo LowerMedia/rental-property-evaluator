@@ -107,7 +107,8 @@ bump the two `branch:` fields in `app.staging.yaml` and
 | Key | Prod | Staging | Notes |
 |---|---|---|---|
 | `DATABASE_URL` | `${db.DATABASE_URL}` | same | platform-injected bindable |
-| `DATABASE_CA_CERT` | `${db.CA_CERT}` | same | DO PG CA — verified TLS in @rpe/db (`pgSsl`) |
+| `DATABASE_CA_CERT` | `${db.CA_CERT}` | same | DO PG CA — verified TLS in @rpe/db (`pgSsl`); PEM-sniffed |
+| `DATABASE_SSL_NO_VERIFY` | **unset** | `true` | dev-tier DBs ship no resolvable CA bindable → encrypted-unverified TLS (in-VPC). Never set on prod |
 | `RPE_API_KEYS_SOURCE` | `db` | `db` | DB-backed keys (RPE-83) |
 | `RPE_AUTH_BASE_URL` | primary origin | `${APP_URL}` | better-auth base + email links |
 | `RPE_AUTH_TRUSTED_ORIGINS` | all three origins | `${APP_URL}` | comma-separated |
