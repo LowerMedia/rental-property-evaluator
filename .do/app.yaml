@@ -1,9 +1,10 @@
 # RPE-98 — DigitalOcean App Platform spec: PRODUCTION (rpe-prod).
 #
-# First creation:   doctl apps create --spec .do/app.yaml   (or console → Apps
-#                   → Create App → import spec). Requires the DO GitHub app to
-#                   be authorized for LowerMedia/rental-property-evaluator.
-# Updates:          doctl apps update <APP_ID> --spec .do/app.yaml
+# App ID:   1dafda68-2e23-4ab6-ad76-2cf4693970ea (created 2026-06-12 from the
+#           v1.8.0 release; new-generation build system). Default hostname:
+#           rpe-prod-igp27.ondigitalocean.app — smoked green; domains attach
+#           at cutover (docs/deploy.md §7).
+# Updates:  doctl apps update 1dafda68-2e23-4ab6-ad76-2cf4693970ea --spec .do/app.yaml
 #
 # Secrets (type: SECRET below) are set once in the console/doctl. After
 # setting them, `doctl apps spec get <APP_ID>` returns the spec with
@@ -102,25 +103,24 @@ services:
       - key: RPE_CORS_ORIGINS
         scope: RUN_TIME
         value: https://rentalpropertyevaluator.com,https://rpe.lowprop.com,https://rpe.goldfinchproperties.com
+      # TODO(Resend): once the sending domain is verified in Resend, restore
+      # RPE_MAIL_PROVIDER=resend + RPE_MAIL_FROM + the RESEND_API_KEY secret
+      # and flip this to "true" (then EV-round-trip per §5). Until then prod
+      # runs the sandbox mailer — registration works without verification.
       - key: RPE_REQUIRE_EMAIL_VERIFICATION
         scope: RUN_TIME
-        value: "true"
-      - key: RPE_MAIL_PROVIDER
-        scope: RUN_TIME
-        value: resend
-      - key: RPE_MAIL_FROM
-        scope: RUN_TIME
-        value: "Rental Property Evaluator <noreply@rentalpropertyevaluator.com>"
+        value: "false"
       # ── secrets: set values in console/doctl, never commit raw ──
       - key: BETTER_AUTH_SECRET
         scope: RUN_TIME
         type: SECRET
-      - key: RESEND_API_KEY
-        scope: RUN_TIME
-        type: SECRET
+        value: EV[1:c/PxlBhddY8W1YGqR4hSse0XVdI7oGCu:DN0hQX94d3R4cLQm3d35iWwmg0IVcqPsMn3v9ziVNdxlDa8KzPpc9qLZXhsntO/Pbwaeg3+VqKx4HyYc]
+      # HUD_TOKEN is an encrypted EMPTY string — set the real token in the
+      # console, then round-trip the new EV value here.
       - key: HUD_TOKEN
         scope: RUN_TIME
         type: SECRET
+        value: EV[1:Nfy1bLOu1LI7IOM9V+Bz/3hhOuAfOszz:vpPxyYBsESoBTAI8lLhq3A==]
 
 static_sites:
   - name: web
