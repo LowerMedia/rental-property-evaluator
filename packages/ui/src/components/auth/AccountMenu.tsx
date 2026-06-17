@@ -14,7 +14,7 @@ export function AccountMenu() {
     return (
       <a
         href="#/login"
-        className="rounded border border-border px-2.5 py-1 text-xs text-mid hover:text-hi"
+        className="rounded border border-border px-2.5 py-1 min-h-[44px] min-w-[44px] inline-flex items-center justify-center sm:min-h-0 sm:min-w-0 text-xs text-mid hover:text-hi"
       >
         Sign in
       </a>
@@ -23,7 +23,7 @@ export function AccountMenu() {
   return (
     <a
       href="#/account"
-      className="rounded border border-border px-2.5 py-1 text-xs text-accent"
+      className="rounded border border-border px-2.5 py-1 min-h-[44px] min-w-[44px] inline-flex items-center justify-center sm:min-h-0 sm:min-w-0 text-xs text-accent"
       aria-label={`Account: ${user?.name ?? ''}`}
     >
       {user?.name ?? 'Account'}
