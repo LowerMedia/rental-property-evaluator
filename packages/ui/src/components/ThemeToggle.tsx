@@ -30,7 +30,7 @@ export function ThemeToggle() {
       aria-label={isLight ? 'Switch to dark mode' : 'Switch to light mode'}
       title={isLight ? 'Dark mode' : 'Light mode'}
       className="
-        rounded border border-border px-3 py-1.5
+        rounded border border-border px-3 py-1.5 min-h-[44px] min-w-[44px] inline-flex items-center justify-center sm:min-h-0 sm:min-w-0
         text-xs text-mid
         hover:border-accent hover:text-accent
         transition-colors
