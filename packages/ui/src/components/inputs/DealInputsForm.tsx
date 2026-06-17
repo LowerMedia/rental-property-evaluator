@@ -43,6 +43,8 @@ export interface DealInputsFormProps {
   locationLookupFailed?: boolean;
   /** Source attribution label shown below the resolved chip (e.g. 'TX state averages'). */
   locationSourceLabel?: string;
+  /** Resolved region rates for the complex-mode "apply estimates" action (RPE-116). */
+  regionRates?: { propertyTaxRate: number; insuranceRate: number } | null;
   /** Called with a valid ZIP5 when the user submits the location input. */
   onZipChange?: (zip: string) => void;
   /** Called when the user clears the location chip. */
@@ -69,6 +71,7 @@ export function DealInputsForm({
   locationResolving = false,
   locationLookupFailed = false,
   locationSourceLabel,
+  regionRates,
   onZipChange,
   onLocationClear,
 }: DealInputsFormProps) {
@@ -110,6 +113,34 @@ export function DealInputsForm({
           onZipChange={onZipChange}
           onClear={onLocationClear}
         />
+      )}
+
+      {/* ── Apply regional tax & insurance estimates (complex mode, RPE-116) ── */}
+      {!simple && regionRates && (location?.stateCode ?? '') !== '' && state.purchasePrice > 0 && (
+        <div className="border-b border-border px-5 py-2">
+          <button
+            type="button"
+            onClick={() => {
+              if (!regionRates) return;
+              dispatch({
+                type: 'SET_EXPENSE_FIXED',
+                field: 'taxes',
+                amount: Math.round(regionRates.propertyTaxRate * state.purchasePrice),
+                period: 'annual',
+              });
+              dispatch({
+                type: 'SET_EXPENSE_FIXED',
+                field: 'insurance',
+                amount: Math.round(regionRates.insuranceRate * state.purchasePrice),
+                period: 'annual',
+              });
+            }}
+            title={`Set property tax & insurance from ${location?.stateCode} regional averages × purchase price`}
+            className="rounded border border-border px-3 py-1 text-xs uppercase tracking-widest text-mid transition-colors hover:border-accent hover:text-accent"
+          >
+            Apply {location?.stateCode} tax &amp; insurance estimates
+          </button>
+        </div>
       )}
 
       {/* ── Acquisition ──────────────────────────────────────────────────── */}
