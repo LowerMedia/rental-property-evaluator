@@ -21,6 +21,7 @@ import type { RegionalRates } from './types.js';
 
 export type { RegionalRates, RegionLevel } from './types.js';
 export { STATE_RATES, NATIONAL_RATES } from './stateRates.js';
+export { stateForZip } from './zipToState.js';
 
 /**
  * Resolve regional assumption rates for the given US state code.
