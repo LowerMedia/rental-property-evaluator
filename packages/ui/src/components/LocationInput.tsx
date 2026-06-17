@@ -111,6 +111,8 @@ export function LocationInput({
         <div className="flex flex-1 gap-2">
           <input
             type="text"
+            inputMode="numeric"
+            autoComplete="postal-code"
             value={draft}
             onChange={(e) => { setDraft(e.target.value); setValidationError(''); }}
             onKeyDown={handleKeyDown}
