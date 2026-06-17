@@ -167,7 +167,7 @@ export function SavedDealsPanel({
           type="button"
           onClick={handleOpenSave}
           className="
-            rounded border border-border px-3 py-1.5
+            rounded border border-border px-3 py-1.5 min-h-[44px] min-w-[44px] inline-flex items-center justify-center sm:min-h-0 sm:min-w-0
             text-xs text-mid uppercase tracking-widest
             hover:border-accent hover:text-accent
             transition-colors
@@ -186,7 +186,7 @@ export function SavedDealsPanel({
             setDealsOpen((o) => !o);
           }}
           className="
-            rounded border border-border px-3 py-1.5
+            rounded border border-border px-3 py-1.5 min-h-[44px] min-w-[44px] inline-flex items-center justify-center sm:min-h-0 sm:min-w-0
             text-xs text-mid uppercase tracking-widest
             hover:border-border-2 hover:text-hi
             transition-colors
