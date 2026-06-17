@@ -41,7 +41,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { resolveRegionalRates } from '@rpe/region-defaults';
+import { resolveRegionalRates, stateForZip } from '@rpe/region-defaults';
 import { fetchHudSafmr } from '../services/hud.js';
 import type { HudSafmrResult } from '../services/hud.js';
 
@@ -98,9 +98,13 @@ export async function handleRegion(
       }
     }
 
-    // If HUD call failed or token absent, try to derive state from ZIP prefix
-    // This is a best-effort fallback — not all ZIP3 prefixes map to a unique state.
-    // For now, leave stateCode empty and serve national defaults.
+    // If HUD didn't resolve a state (no token / HUD failure / null / uncovered
+    // ZIP), derive it from the ZIP3 prefix so location still resolves to
+    // state-level defaults instead of hanging on "pending" (RPE-113). HUD,
+    // when present, stays authoritative for stateCode + town/county label + rent.
+    if (!stateCode) {
+      stateCode = stateForZip(zip);
+    }
 
     const rates = resolveRegionalRates(stateCode);
 
