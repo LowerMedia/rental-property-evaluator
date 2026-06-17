@@ -86,7 +86,7 @@ describe('GET /region', () => {
 
   // ── Static-only (no HUD_TOKEN) ──────────────────────────────────────────────
 
-  it('returns national defaults when HUD_TOKEN is absent', async () => {
+  it('derives state from the ZIP and serves state-level rates when HUD_TOKEN is absent (RPE-113)', async () => {
     delete process.env['HUD_TOKEN'];
     // fetchHudSafmr should NOT be called when no token is set
 
@@ -94,12 +94,24 @@ describe('GET /region', () => {
     expect(r.status).toBe(200);
     const body = await r.json() as Record<string, unknown>;
     expect(body['zip']).toBe('78701');
-    expect(body['rent']).toBeNull();
-    // Should fall back to national (no stateCode resolved without HUD)
-    expect(body['resolvedLevel']).toBe('national');
+    expect(body['rent']).toBeNull(); // no rent without HUD
+    // ZIP3 787 → TX: state resolves from the ZIP even with no HUD token,
+    // so the UI no longer hangs on "pending".
+    expect(body['stateCode']).toBe('TX');
+    expect(body['label']).toBe('TX · 78701');
+    expect(body['resolvedLevel']).toBe('state');
     expect(typeof body['propertyTaxRate']).toBe('number');
     expect(typeof body['insuranceRate']).toBe('number');
     expect(mockFetchHudSafmr).not.toHaveBeenCalled();
+  });
+
+  it('resolves the reported-bug ZIP 52240 to IA without HUD (RPE-113)', async () => {
+    delete process.env['HUD_TOKEN'];
+    const r = await fetch(`${base}/region?zip=52240`);
+    expect(r.status).toBe(200);
+    const body = await r.json() as Record<string, unknown>;
+    expect(body['stateCode']).toBe('IA');
+    expect(body['resolvedLevel']).toBe('state');
   });
 
   // ── HUD SAFMR integration ───────────────────────────────────────────────────
@@ -155,15 +167,17 @@ describe('GET /region', () => {
     expect(body['rent']).toBeNull();
   });
 
-  it('falls back gracefully when HUD fetch rejects', async () => {
+  it('falls back to ZIP-derived state when HUD fetch rejects (RPE-113)', async () => {
     process.env['HUD_TOKEN'] = 'test-token';
     mockFetchHudSafmr.mockRejectedValueOnce(new Error('network error'));
 
     const r = await fetch(`${base}/region?zip=12345`);
     expect(r.status).toBe(200);
     const body = await r.json() as Record<string, unknown>;
-    expect(body['resolvedLevel']).toBe('national');
-    expect(body['rent']).toBeNull();
+    // ZIP3 123 → NY: HUD blew up, but the ZIP fallback still resolves state.
+    expect(body['stateCode']).toBe('NY');
+    expect(body['resolvedLevel']).toBe('state');
+    expect(body['rent']).toBeNull(); // no rent — HUD failed
   });
 
   it('includes correct label when HUD resolves town and state', async () => {
