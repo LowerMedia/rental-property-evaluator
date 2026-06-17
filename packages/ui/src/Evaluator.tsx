@@ -108,7 +108,15 @@ function MetricRow({ metricKey, result, label }: MetricRowProps) {
     <div className="flex items-center gap-2 py-2 border-b border-border last:border-b-0">
       <span className={`shrink-0 w-1.5 h-1.5 rounded-full ${DOT_CLASS[signal]}`} aria-hidden="true" />
       <div className="flex-1 min-w-0">
-        <span className="text-xs text-mid truncate block" title={cfg.description}>
+        {/* Keyboard-focusable + screen-reader-accessible metric tooltip (RPE-118):
+            cfg.description carries the formula + definition; tabIndex + aria-label
+            make it reachable without a mouse, focus-visible ring shows focus. */}
+        <span
+          className="block cursor-help truncate rounded-sm text-xs text-mid outline-none focus-visible:ring-1 focus-visible:ring-accent"
+          tabIndex={0}
+          title={cfg.description}
+          aria-label={`${displayLabel}: ${cfg.description}`}
+        >
           {displayLabel}
         </span>
         {note && (
