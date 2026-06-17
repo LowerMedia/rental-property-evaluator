@@ -849,6 +849,7 @@ function EvaluatorInner({ adConfig, authEnabled }: { adConfig?: AdConfig; authEn
               locationResolving={locationResolving}
               locationLookupFailed={locationLookupFailed}
               locationSourceLabel={locationRates?.sourceLabel}
+              regionRates={locationRates}
               onZipChange={handleZipChange}
               onLocationClear={handleLocationClear}
             />
