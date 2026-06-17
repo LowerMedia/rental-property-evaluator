@@ -674,14 +674,14 @@ function EvaluatorInner({ adConfig, authEnabled }: { adConfig?: AdConfig; authEn
       </a>
 
       {/* ── Header ── */}
-      <header className="shrink-0 flex items-center justify-between gap-4 border-b border-border bg-base px-5 py-3">
+      <header className="shrink-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border bg-base px-5 py-3">
         <div className="flex items-baseline gap-3">
           <h1 className="font-display text-xl tracking-wide text-hi">
             Rental Property Evaluator
           </h1>
           <span className="hidden text-xs text-lo sm:inline">{proFormaMode ? 'Pro-Forma' : 'Screener'}</span>
         </div>
-        <div className="no-print flex items-center gap-2">
+        <div className="no-print flex flex-wrap items-center justify-end gap-2">
           <ThemeToggle />
           {authEnabled ? <AccountMenu /> : null}
           <button
