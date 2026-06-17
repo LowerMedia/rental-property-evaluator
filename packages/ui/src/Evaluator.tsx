@@ -19,7 +19,7 @@ import { ProFormaPanel } from './components/ProFormaPanel';
 import { fmtCurrency, fmtPercent, fmtNumber, fmtMultiplier, NULL_DISPLAY } from './utils/format';
 import type { SavedDeal } from './state/savedDealsSchema';
 import { SIMPLE_RESULT_KEYS, type UiMode } from './state/uiMode';
-import { applySimpleBaselines } from './state/simpleBaselines';
+import { applySimpleBaselines, getSimpleBaselines, BASELINE_DESCRIPTIONS, type LocationRateOverrides } from './state/simpleBaselines';
 import { useLocationDefaults } from './hooks/useLocationDefaults';
 import { ConnectorSettingsModal } from './components/ConnectorSettingsModal';
 import { getRentCastKey } from './state/connectorStorage';
@@ -231,23 +231,89 @@ function ScoreCard({ result, uiMode = 'complex' }: { result: ScreenerResults; ui
   );
 }
 
-function ResultsPanel({ results, uiMode = 'complex' }: { results: ScreenerResults; uiMode?: UiMode }) {
+/** Whole-dollar currency formatter for assumption amounts. */
+const assumptionMoney = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  maximumFractionDigits: 0,
+});
+
+/**
+ * Simple-mode assumptions (RPE-119). Collapsed to the legacy one-line note;
+ * expands to the live baseline values driving the estimate (tax & insurance
+ * reflect the resolved ZIP when a location is set). Native <details> gives a
+ * keyboard-accessible disclosure for free.
+ */
+function AssumptionsAccordion({
+  purchasePrice,
+  rateOverrides,
+  sourceLabel,
+}: {
+  purchasePrice: number;
+  rateOverrides?: LocationRateOverrides;
+  sourceLabel?: string;
+}) {
+  const b = getSimpleBaselines(purchasePrice, rateOverrides);
+  const rows: Array<{ label: string; value: string; desc: string }> = [
+    { label: 'Interest rate', value: `${b.interestRate.toFixed(1)}%`, desc: BASELINE_DESCRIPTIONS.interestRate },
+    { label: 'Loan term', value: `${b.loanTermYears} yr`, desc: BASELINE_DESCRIPTIONS.loanTermYears },
+    { label: 'Closing costs', value: assumptionMoney.format(b.closingCosts), desc: BASELINE_DESCRIPTIONS.closingCosts },
+    { label: 'Vacancy', value: `${b.vacancyPct}%`, desc: BASELINE_DESCRIPTIONS.vacancyPct },
+    { label: 'CapEx', value: `${b.expenses.capExPct}%`, desc: BASELINE_DESCRIPTIONS.capExPct },
+    { label: 'Maintenance', value: `${b.expenses.maintPct}%`, desc: BASELINE_DESCRIPTIONS.maintPct },
+    { label: 'Management', value: `${b.expenses.mgmtPct}%`, desc: BASELINE_DESCRIPTIONS.mgmtPct },
+    { label: 'Misc', value: `${b.expenses.miscPct}%`, desc: BASELINE_DESCRIPTIONS.miscPct },
+    { label: 'Property tax', value: `${assumptionMoney.format(b.expenses.taxes.amount)}/yr`, desc: BASELINE_DESCRIPTIONS.taxes },
+    { label: 'Insurance', value: `${assumptionMoney.format(b.expenses.insurance.amount)}/yr`, desc: BASELINE_DESCRIPTIONS.insurance },
+  ];
+
+  return (
+    <details className="group rounded border border-border bg-raised text-xs" role="note">
+      <summary className="flex cursor-pointer list-none items-start gap-1.5 px-4 py-2 italic text-lo marker:hidden [&::-webkit-details-marker]:hidden">
+        <span className="mt-0.5 transition-transform group-open:rotate-90" aria-hidden="true">▸</span>
+        <span>
+          Results estimated using national-average financing and expense assumptions.
+          {rateOverrides ? ' Tax & insurance are localized to your ZIP.' : ''} Switch to Complex mode to use your own figures.
+        </span>
+      </summary>
+      <div className="border-t border-border px-4 py-3 not-italic">
+        {sourceLabel && <p className="mb-2 text-lo">📊 {sourceLabel}</p>}
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-3">
+          {rows.map((r) => (
+            <div key={r.label} className="flex justify-between gap-2" title={r.desc}>
+              <dt className="text-lo">{r.label}</dt>
+              <dd className="tabular-nums text-mid">{r.value}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    </details>
+  );
+}
+
+function ResultsPanel({
+  results,
+  uiMode = 'complex',
+  purchasePrice = 0,
+  rateOverrides,
+  sourceLabel,
+}: {
+  results: ScreenerResults;
+  uiMode?: UiMode;
+  /** Drives the live baseline values shown in the simple-mode assumptions accordion (RPE-119). */
+  purchasePrice?: number;
+  rateOverrides?: LocationRateOverrides;
+  sourceLabel?: string;
+}) {
   const simple = uiMode === 'simple';
 
   return (
     <div className="flex flex-col gap-4">
       <ScoreCard result={results} uiMode={uiMode} />
 
-      {/* ── Assumptions badge (simple mode) ──────────────────────────────────── */}
+      {/* ── Assumptions accordion (simple mode, RPE-119) ─────────────────────── */}
       {simple && (
-        <div
-          className="rounded border border-border bg-raised px-4 py-2 text-xs text-lo italic"
-          role="note"
-          aria-label="Results based on assumptions"
-        >
-          Results estimated using national-average financing and expense assumptions.
-          Switch to Complex mode to use your own figures.
-        </div>
+        <AssumptionsAccordion purchasePrice={purchasePrice} rateOverrides={rateOverrides} sourceLabel={sourceLabel} />
       )}
 
       {/* ── Returns ──────────────────────────────────────────────────────────── */}
@@ -803,7 +869,13 @@ function EvaluatorInner({ adConfig, authEnabled }: { adConfig?: AdConfig; authEn
             <ComparisonPanel scenarios={scenarios} resultsList={resultsList} />
           ) : (
             <div className="flex flex-col gap-4">
-              <ResultsPanel results={activeResults} uiMode={uiMode} />
+              <ResultsPanel
+                results={activeResults}
+                uiMode={uiMode}
+                purchasePrice={activeNormalized.purchasePrice}
+                rateOverrides={rateOverrides}
+                sourceLabel={locationRates?.sourceLabel}
+              />
               <AmortizationPanel
                 loanAmount={calcLoanAmount(activeNormalized)}
                 interestRate={activeNormalized.interestRate}
