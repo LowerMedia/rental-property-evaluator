@@ -738,7 +738,7 @@ function EvaluatorInner({ adConfig, authEnabled }: { adConfig?: AdConfig; authEn
   };
 
   return (
-    <div className="h-dvh bg-base text-hi flex flex-col">
+    <div className="min-h-dvh lg:h-dvh bg-base text-hi flex flex-col">
       {/* ── Skip navigation ── */}
       <a
         href="#results"
@@ -834,7 +834,7 @@ function EvaluatorInner({ adConfig, authEnabled }: { adConfig?: AdConfig; authEn
         {/* Left — inputs (hidden in print) */}
         <aside
           aria-label="Deal inputs"
-          className="no-print flex flex-col overflow-hidden border-b border-border lg:border-b-0 lg:border-r lg:border-border"
+          className="no-print flex flex-col lg:overflow-hidden border-b border-border lg:border-b-0 lg:border-r lg:border-border"
         >
           <ScenarioTabs
             scenarios={scenarios}
@@ -845,7 +845,7 @@ function EvaluatorInner({ adConfig, authEnabled }: { adConfig?: AdConfig; authEn
             onRemove={removeScenario}
             onRename={renameScenario}
           />
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 lg:overflow-y-auto">
             <DealInputsForm
               state={activeInputs}
               dispatch={dispatchToActive}
@@ -870,7 +870,7 @@ function EvaluatorInner({ adConfig, authEnabled }: { adConfig?: AdConfig; authEn
           aria-label="Evaluation results"
           aria-live="polite"
           aria-atomic="false"
-          className="overflow-y-auto p-5"
+          className="lg:overflow-y-auto p-5"
         >
           {proFormaMode && proFormaResults ? (
             <ProFormaPanel results={proFormaResults} purchasePrice={activeNormalized.purchasePrice} />
