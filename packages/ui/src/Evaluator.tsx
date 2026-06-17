@@ -411,7 +411,7 @@ function ModeToggle({ proFormaMode, onChange, disableProForma = false }: ModeTog
         <button
           type="button"
           onClick={() => onChange(false)}
-          className={`px-3 py-1.5 uppercase tracking-widest transition-colors ${
+          className={`px-3 py-1.5 min-h-[44px] min-w-[44px] inline-flex items-center justify-center sm:min-h-0 sm:min-w-0 uppercase tracking-widest transition-colors ${
             !proFormaMode
               ? 'bg-accent text-base font-semibold'
               : 'text-lo hover:text-mid hover:bg-raised'
@@ -424,7 +424,7 @@ function ModeToggle({ proFormaMode, onChange, disableProForma = false }: ModeTog
           type="button"
           onClick={() => !disableProForma && onChange(true)}
           disabled={disableProForma}
-          className={`px-3 py-1.5 uppercase tracking-widest transition-colors border-l border-border ${
+          className={`px-3 py-1.5 min-h-[44px] min-w-[44px] inline-flex items-center justify-center sm:min-h-0 sm:min-w-0 uppercase tracking-widest transition-colors border-l border-border ${
             disableProForma
               ? 'text-lo/40 cursor-not-allowed'
               : proFormaMode
@@ -462,7 +462,7 @@ function UiModeToggle({ uiMode, onChange }: UiModeToggleProps) {
       <button
         type="button"
         onClick={() => onChange('simple')}
-        className={`px-3 py-1.5 uppercase tracking-widest transition-colors ${
+        className={`px-3 py-1.5 min-h-[44px] min-w-[44px] inline-flex items-center justify-center sm:min-h-0 sm:min-w-0 uppercase tracking-widest transition-colors ${
           uiMode === 'simple'
             ? 'bg-accent text-base font-semibold'
             : 'text-lo hover:text-mid hover:bg-raised'
@@ -474,7 +474,7 @@ function UiModeToggle({ uiMode, onChange }: UiModeToggleProps) {
       <button
         type="button"
         onClick={() => onChange('complex')}
-        className={`px-3 py-1.5 uppercase tracking-widest transition-colors border-l border-border ${
+        className={`px-3 py-1.5 min-h-[44px] min-w-[44px] inline-flex items-center justify-center sm:min-h-0 sm:min-w-0 uppercase tracking-widest transition-colors border-l border-border ${
           uiMode === 'complex'
             ? 'bg-accent text-base font-semibold'
             : 'text-lo hover:text-mid hover:bg-raised'
@@ -510,7 +510,7 @@ function ShareButton({ inputs }: { inputs: DealInputs }) {
       type="button"
       onClick={() => void handleShare()}
       className="
-        rounded border border-border px-3 py-1.5
+        rounded border border-border px-3 py-1.5 min-h-[44px] min-w-[44px] inline-flex items-center justify-center sm:min-h-0 sm:min-w-0
         text-xs text-mid uppercase tracking-widest
         hover:border-accent hover:text-accent
         transition-colors
@@ -762,7 +762,7 @@ function EvaluatorInner({ adConfig, authEnabled }: { adConfig?: AdConfig; authEn
             type="button"
             onClick={() => setShowSettings(true)}
             className="
-              rounded border border-border px-3 py-1.5
+              rounded border border-border px-3 py-1.5 min-h-[44px] min-w-[44px] inline-flex items-center justify-center sm:min-h-0 sm:min-w-0
               text-xs text-mid uppercase tracking-widest
               hover:border-accent hover:text-accent
               transition-colors
@@ -791,7 +791,7 @@ function EvaluatorInner({ adConfig, authEnabled }: { adConfig?: AdConfig; authEn
             type="button"
             onClick={() => exportToCsv(scenarios, resultsList)}
             className="
-              rounded border border-border px-3 py-1.5
+              rounded border border-border px-3 py-1.5 min-h-[44px] min-w-[44px] inline-flex items-center justify-center sm:min-h-0 sm:min-w-0
               text-xs text-mid uppercase tracking-widest
               hover:border-accent hover:text-accent
               transition-colors
@@ -804,7 +804,7 @@ function EvaluatorInner({ adConfig, authEnabled }: { adConfig?: AdConfig; authEn
             type="button"
             onClick={() => window.print()}
             className="
-              rounded border border-border px-3 py-1.5
+              rounded border border-border px-3 py-1.5 min-h-[44px] min-w-[44px] inline-flex items-center justify-center sm:min-h-0 sm:min-w-0
               text-xs text-mid uppercase tracking-widest
               hover:border-accent hover:text-accent
               transition-colors
@@ -817,7 +817,7 @@ function EvaluatorInner({ adConfig, authEnabled }: { adConfig?: AdConfig; authEn
             type="button"
             onClick={() => dispatchToActive({ type: 'RESET' })}
             className="
-              rounded border border-border px-3 py-1.5
+              rounded border border-border px-3 py-1.5 min-h-[44px] min-w-[44px] inline-flex items-center justify-center sm:min-h-0 sm:min-w-0
               text-xs text-mid uppercase tracking-widest
               hover:border-accent hover:text-accent
               transition-colors
