@@ -170,14 +170,31 @@ function fmtThreshold(cfg: (typeof SCREENER_METRIC_CONFIG)[MetricKey]): string {
   return `${symbol} ${value}`;
 }
 
-function ScoreCard({ result, uiMode = 'complex' }: { result: ScreenerResults; uiMode?: UiMode }) {
-  const [explainOpen, setExplainOpen] = useState(false);
+/**
+ * Score = passing ÷ scored metrics (the visible subset in simple mode).
+ * Single source of truth for both the full ScoreCard and the mobile
+ * StickyScoreBar (RPE-112).
+ */
+function computeScore(result: ScreenerResults, uiMode: UiMode) {
   const scoredKeys = uiMode === 'simple' ? SIMPLE_SCORED_KEYS : SCORED_KEYS;
   const signals = scoredKeys.map((k) => evalSignal(k, result[k]));
   const total = signals.filter((s) => s !== 'null').length;
   const passing = signals.filter((s) => s === 'pass').length;
   const pct = total > 0 ? (passing / total) * 100 : 0;
-  const scoreColor = pct >= 75 ? 'text-pass' : pct >= 50 ? 'text-warn' : 'text-fail';
+  return { scoredKeys, total, passing, pct };
+}
+
+/** Score band → Tailwind tokens. ≥75% green, ≥50% amber, below red. */
+function scoreBand(pct: number): { text: string; bg: string } {
+  if (pct >= 75) return { text: 'text-pass', bg: 'bg-pass' };
+  if (pct >= 50) return { text: 'text-warn', bg: 'bg-warn' };
+  return { text: 'text-fail', bg: 'bg-fail' };
+}
+
+function ScoreCard({ result, uiMode = 'complex' }: { result: ScreenerResults; uiMode?: UiMode }) {
+  const [explainOpen, setExplainOpen] = useState(false);
+  const { scoredKeys, total, passing, pct } = computeScore(result, uiMode);
+  const scoreColor = scoreBand(pct).text;
 
   return (
     <div className="rounded border border-border bg-surface p-4">
@@ -189,7 +206,7 @@ function ScoreCard({ result, uiMode = 'complex' }: { result: ScreenerResults; ui
       </div>
       <div className="h-1 rounded-full bg-raised overflow-hidden">
         <div
-          className={`h-full rounded-full transition-all ${pct >= 75 ? 'bg-pass' : pct >= 50 ? 'bg-warn' : 'bg-fail'}`}
+          className={`h-full rounded-full transition-all ${scoreBand(pct).bg}`}
           style={{ width: `${pct}%` }}
           role="progressbar"
           aria-valuenow={passing}
@@ -236,6 +253,41 @@ function ScoreCard({ result, uiMode = 'complex' }: { result: ScreenerResults; ui
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * RPE-112 — compact, mobile-only score summary pinned to the top of the page
+ * so the headline result stays visible while the inputs are scrolled. Hidden
+ * at lg, where the two-pane layout keeps the full ScoreCard in view. The whole
+ * bar links to the full results. Banding mirrors ScoreCard via scoreBand().
+ */
+function StickyScoreBar({ result, uiMode }: { result: ScreenerResults; uiMode: UiMode }) {
+  const { total, passing, pct } = computeScore(result, uiMode);
+  const band = scoreBand(pct);
+  return (
+    <a
+      href="#results"
+      className="no-print lg:hidden sticky top-0 z-20 flex min-h-[44px] items-center justify-between gap-4 border-b border-border bg-base px-5 py-2"
+      aria-label={`Score: ${passing} of ${total} metrics passing. Jump to results.`}
+    >
+      <span className="flex items-baseline gap-2">
+        <span className="section-title text-xs">Score</span>
+        <span className={`num font-mono text-base ${band.text}`}>
+          {passing}
+          <span className="text-lo text-xs">/{total}</span>
+        </span>
+      </span>
+      <span className="flex max-w-[45%] flex-1 items-center gap-2">
+        <span className="h-1 flex-1 overflow-hidden rounded-full bg-raised">
+          <span
+            className={`block h-full rounded-full transition-all ${band.bg}`}
+            style={{ width: `${pct}%` }}
+          />
+        </span>
+        <span className="whitespace-nowrap text-[10px] uppercase tracking-widest text-lo">Results ↓</span>
+      </span>
+    </a>
   );
 }
 
@@ -828,6 +880,13 @@ function EvaluatorInner({ adConfig, authEnabled }: { adConfig?: AdConfig; authEn
         </div>
       </header>
       {authEnabled ? <AuthScreen /> : null}
+
+      {/* ── Mobile sticky score (RPE-112): keep the headline result visible while
+           inputs are scrolled. Only when the single-scenario ScoreCard is the active
+           result view; hidden at lg where the results pane is always visible. ── */}
+      {!(proFormaMode && proFormaResults) && !isComparing && (
+        <StickyScoreBar result={activeResults} uiMode={uiMode} />
+      )}
 
       {/* ── Body ── */}
       <main className="flex-1 min-h-0 flex flex-col lg:grid lg:grid-cols-[380px_1fr]">
