@@ -10,10 +10,13 @@
 import {
   evaluate,
   SCREENER_METRIC_CONFIG,
+  scoreVerdict,
+  SCORE_VERDICT_LABEL,
   type DealInputs,
   type MetricDirection,
   type ProFormaResults,
   type ProjectionYear,
+  type ScoreVerdict,
   type ScreenerResults,
 } from '@rpe/engine';
 import { CSV_ROWS, buildCsvRows, fmtMetricRaw, rowsToCsv } from './csv';
@@ -46,6 +49,8 @@ export interface DealReport {
     total: number;
     /** passing / total × 100, 0 when nothing is scoreable. */
     pct: number;
+    /** Go/no-go band (RPE-108): pass ≥75% · marginal ≥50% · fail below. */
+    verdict: ScoreVerdict;
   };
   metrics: ReportMetric[];
   /** Present only in pro-forma mode. */
@@ -103,6 +108,7 @@ export function buildReport(inputs: DealInputs, options: BuildReportOptions = {}
 
   const scored = metrics.filter((m) => m.signal === 'pass' || m.signal === 'fail');
   const passing = scored.filter((m) => m.signal === 'pass').length;
+  const pct = scored.length > 0 ? (passing / scored.length) * 100 : 0;
 
   return {
     meta: {
@@ -115,7 +121,8 @@ export function buildReport(inputs: DealInputs, options: BuildReportOptions = {}
     score: {
       passing,
       total: scored.length,
-      pct: scored.length > 0 ? (passing / scored.length) * 100 : 0,
+      pct,
+      verdict: scoreVerdict(pct),
     },
     metrics,
     proForma: isProForma(results)
@@ -140,6 +147,14 @@ export function reportToCsvRows(report: DealReport): string[][] {
   ) as unknown as ScreenerResults;
 
   const rows = buildCsvRows([{ name: 'Value' }], [screenerLike]);
+
+  // Score summary up top (RPE-108) — verdict + passing count.
+  rows.splice(
+    1,
+    0,
+    ['Score', 'Verdict', SCORE_VERDICT_LABEL[report.score.verdict]],
+    ['Score', 'Passing', `${report.score.passing} of ${report.score.total} (${report.score.pct.toFixed(0)}%)`],
+  );
 
   if (report.proForma !== null && report.proForma.projection.length > 0) {
     rows.push([]);

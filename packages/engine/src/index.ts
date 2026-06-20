@@ -28,6 +28,15 @@ export { calcProjection } from './projection';
 export { calcProForma } from './proforma';
 export { calcIRR, calcNPV } from './irr';
 export { SCREENER_METRIC_CONFIG } from './directions';
+export {
+  scoreVerdict,
+  SCORE_BAND_MIN,
+  SCORE_VERDICT_LABEL,
+  evalSignal,
+  SCORED_KEYS,
+  computeScreenerScore,
+} from './score';
+export type { ScoreVerdict, ScoreSignal, ScreenerScore } from './score';
 export { EXAMPLE_DEAL_INPUTS, EXAMPLE_DEAL_EXPECTED } from './exampleDeal';
 export type { MetricDirection, MetricConfig } from './directions';
 

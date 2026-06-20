@@ -8,6 +8,7 @@
 import type { ProFormaResults, ProjectionYear } from '@rpe/engine';
 import { fmtCurrency, fmtPercent, fmtMultiplier, NULL_DISPLAY } from '../utils/format';
 import { CashFlowChart, EquityBuildChart } from './ProFormaCharts';
+import { VerdictChip } from './VerdictChip';
 
 // ─── KPI card ─────────────────────────────────────────────────────────────────
 
@@ -162,9 +163,11 @@ function EmptyProForma() {
 export interface ProFormaPanelProps {
   results: ProFormaResults;
   purchasePrice: number;
+  /** Screener score % for the go/no-go verdict chip (RPE-108). */
+  screenerPct: number;
 }
 
-export function ProFormaPanel({ results, purchasePrice }: ProFormaPanelProps) {
+export function ProFormaPanel({ results, purchasePrice, screenerPct }: ProFormaPanelProps) {
   const { projection, irr, npv, equityMultiple, netSaleProceeds, totalProfit,
           salePrice, sellingCosts } = results;
 
@@ -177,6 +180,12 @@ export function ProFormaPanel({ results, purchasePrice }: ProFormaPanelProps) {
 
   return (
     <div className="flex flex-col gap-4">
+
+      {/* ── Verdict (RPE-108) ──────────────────────────────────────────────── */}
+      <div className="flex items-center gap-2">
+        <span className="section-title text-xs">Hold-Period Analysis</span>
+        <VerdictChip pct={screenerPct} />
+      </div>
 
       {/* ── KPI summary ──────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">

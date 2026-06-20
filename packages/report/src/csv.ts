@@ -4,7 +4,7 @@
  * The UI keeps only the browser download wrapper.
  */
 
-import { SCREENER_METRIC_CONFIG } from '@rpe/engine';
+import { SCREENER_METRIC_CONFIG, SCORE_VERDICT_LABEL, computeScreenerScore } from '@rpe/engine';
 import type { ScreenerResults } from '@rpe/engine';
 import { fmtCurrency, fmtPercent, fmtNumber, fmtMultiplier, NULL_DISPLAY } from './format';
 
@@ -102,6 +102,13 @@ export function buildCsvRows(
 ): string[][] {
   const header = ['Group', 'Metric', ...scenarios.map((s) => s.name)];
 
+  // Verdict row up top (RPE-108) — go/no-go per scenario from the full scored set.
+  const verdictRow = [
+    'Score',
+    'Verdict',
+    ...resultsList.map((r) => SCORE_VERDICT_LABEL[computeScreenerScore(r).verdict]),
+  ];
+
   const dataRows = CSV_ROWS.flatMap((row) => {
     const values = resultsList.map((r) => r[row.key]);
     // Skip rows where every scenario returned null
@@ -112,5 +119,5 @@ export function buildCsvRows(
     return [[row.group, label, ...cells]];
   });
 
-  return [header, ...dataRows];
+  return [header, verdictRow, ...dataRows];
 }
