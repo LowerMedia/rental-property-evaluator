@@ -1,5 +1,6 @@
 import { useMemo, useState, useCallback, useEffect } from 'react';
-import { evaluate, SCREENER_METRIC_CONFIG, calcLoanAmount, normalizeInputs } from '@rpe/engine';
+import { evaluate, SCREENER_METRIC_CONFIG, calcLoanAmount, normalizeInputs, scoreVerdict, evalSignal, SCORED_KEYS, computeScreenerScore, type ScoreVerdict } from '@rpe/engine';
+import { VerdictChip } from './components/VerdictChip';
 import type { DealInputs, ScreenerResults, ProFormaResults } from '@rpe/engine';
 import { useSavedDeals } from './hooks/useSavedDeals';
 import { useScenarios } from './hooks/useScenarios';
@@ -50,14 +51,7 @@ function fmtMetric(key: MetricKey, value: number | null): string {
   return fmtNumber(value, dec);
 }
 
-function evalSignal(key: MetricKey, value: number | null): 'pass' | 'fail' | 'null' | 'neutral' {
-  if (value === null) return 'null';
-  const cfg = SCREENER_METRIC_CONFIG[key];
-  if (cfg.direction === 'none' || cfg.threshold === undefined) return 'neutral';
-  return cfg.direction === 'higher'
-    ? value >= cfg.threshold ? 'pass' : 'fail'
-    : value <= cfg.threshold ? 'pass' : 'fail';
-}
+// evalSignal is imported from @rpe/engine (RPE-108) — single source of truth for per-metric pass/fail.
 
 const SIGNAL_CLASS: Record<ReturnType<typeof evalSignal>, string> = {
   pass: 'text-pass',
@@ -141,14 +135,7 @@ function ResultGroup({ title, children }: { title: string; children: React.React
   );
 }
 
-/**
- * All scored metric keys (direction !== 'none') — used by the full ScoreCard in complex mode.
- */
-const SCORED_KEYS: MetricKey[] = (
-  Object.entries(SCREENER_METRIC_CONFIG) as [MetricKey, (typeof SCREENER_METRIC_CONFIG)[MetricKey]][]
-)
-  .filter(([, cfg]) => cfg.direction !== 'none')
-  .map(([key]) => key);
+// SCORED_KEYS (all metrics with a pass/fail threshold) is imported from @rpe/engine (RPE-108).
 
 /**
  * Scored keys visible in simple mode — intersection of SCORED_KEYS and SIMPLE_RESULT_KEYS.
@@ -171,25 +158,27 @@ function fmtThreshold(cfg: (typeof SCREENER_METRIC_CONFIG)[MetricKey]): string {
 }
 
 /**
- * Score = passing ÷ scored metrics (the visible subset in simple mode).
- * Single source of truth for both the full ScoreCard and the mobile
- * StickyScoreBar (RPE-112).
+ * Score = passing ÷ scored metrics (the visible subset in simple mode), via the
+ * engine's computeScreenerScore (single source of truth, RPE-108). The UI only
+ * picks the mode-specific key set; aggregation + verdict band live in @rpe/engine.
  */
 function computeScore(result: ScreenerResults, uiMode: UiMode) {
   const scoredKeys = uiMode === 'simple' ? SIMPLE_SCORED_KEYS : SCORED_KEYS;
-  const signals = scoredKeys.map((k) => evalSignal(k, result[k]));
-  const total = signals.filter((s) => s !== 'null').length;
-  const passing = signals.filter((s) => s === 'pass').length;
-  const pct = total > 0 ? (passing / total) * 100 : 0;
+  const { passing, total, pct } = computeScreenerScore(result, scoredKeys);
   return { scoredKeys, total, passing, pct };
 }
 
-/** Score band → Tailwind tokens. ≥75% green, ≥50% amber, below red. */
-function scoreBand(pct: number): { text: string; bg: string } {
-  if (pct >= 75) return { text: 'text-pass', bg: 'bg-pass' };
-  if (pct >= 50) return { text: 'text-warn', bg: 'bg-warn' };
-  return { text: 'text-fail', bg: 'bg-fail' };
+/** Score band → Tailwind tokens, keyed off the engine verdict (single source of truth, RPE-108). */
+function scoreBand(pct: number): { verdict: ScoreVerdict; text: string; bg: string } {
+  const verdict = scoreVerdict(pct);
+  const tokens =
+    verdict === 'pass' ? { text: 'text-pass', bg: 'bg-pass' } :
+    verdict === 'marginal' ? { text: 'text-warn', bg: 'bg-warn' } :
+    { text: 'text-fail', bg: 'bg-fail' };
+  return { verdict, ...tokens };
 }
+
+// VerdictChip is in ./components/VerdictChip (RPE-108), shared with ProFormaPanel.
 
 function ScoreCard({ result, uiMode = 'complex' }: { result: ScreenerResults; uiMode?: UiMode }) {
   const [explainOpen, setExplainOpen] = useState(false);
@@ -198,8 +187,11 @@ function ScoreCard({ result, uiMode = 'complex' }: { result: ScreenerResults; ui
 
   return (
     <div className="rounded border border-border bg-surface p-4">
-      <div className="flex items-baseline justify-between mb-2">
-        <span className="section-title text-xs">Score</span>
+      <div className="flex items-center justify-between mb-2">
+        <span className="flex items-center gap-2">
+          <span className="section-title text-xs">Score</span>
+          <VerdictChip pct={pct} />
+        </span>
         <span className={`num text-lg font-mono ${scoreColor}`}>
           {passing}<span className="text-lo text-sm">/{total}</span>
         </span>
@@ -271,12 +263,13 @@ function StickyScoreBar({ result, uiMode }: { result: ScreenerResults; uiMode: U
       className="no-print lg:hidden sticky top-0 z-20 flex min-h-[44px] items-center justify-between gap-4 border-b border-border bg-base px-5 py-2"
       aria-label={`Score: ${passing} of ${total} metrics passing. Jump to results.`}
     >
-      <span className="flex items-baseline gap-2">
+      <span className="flex items-center gap-2">
         <span className="section-title text-xs">Score</span>
         <span className={`num font-mono text-base ${band.text}`}>
           {passing}
           <span className="text-lo text-xs">/{total}</span>
         </span>
+        <VerdictChip pct={pct} />
       </span>
       <span className="flex max-w-[45%] flex-1 items-center gap-2">
         <span className="h-1 flex-1 overflow-hidden rounded-full bg-raised">
@@ -932,7 +925,7 @@ function EvaluatorInner({ adConfig, authEnabled }: { adConfig?: AdConfig; authEn
           className="lg:overflow-y-auto p-5"
         >
           {proFormaMode && proFormaResults ? (
-            <ProFormaPanel results={proFormaResults} purchasePrice={activeNormalized.purchasePrice} />
+            <ProFormaPanel results={proFormaResults} purchasePrice={activeNormalized.purchasePrice} screenerPct={computeScore(activeResults, uiMode).pct} />
           ) : isComparing ? (
             <ComparisonPanel scenarios={scenarios} resultsList={resultsList} />
           ) : (

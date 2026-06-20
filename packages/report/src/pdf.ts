@@ -16,6 +16,7 @@
 
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 import { fmtCurrency, fmtMultiplier, fmtPercent } from './format';
+import { SCORE_VERDICT_LABEL } from '@rpe/engine';
 import type { DealReport } from './report';
 
 const PAGE = { width: 595.28, height: 841.89 } as const; // A4 portrait, points
@@ -25,6 +26,7 @@ const LINE = 16;
 const INK = rgb(0.07, 0.07, 0.07);
 const MID = rgb(0.4, 0.4, 0.4);
 const PASS = rgb(0.09, 0.4, 0.2);
+const WARN = rgb(0.72, 0.52, 0.04);
 const FAIL = rgb(0.6, 0.11, 0.11);
 
 interface Cursor {
@@ -101,10 +103,12 @@ export async function reportToPdf(report: DealReport): Promise<Uint8Array> {
   c.y -= 8;
 
   // ── Score ────────────────────────────────────────────────────────────
-  text(c, `Score: ${report.score.passing} / ${report.score.total} metrics passing (${report.score.pct.toFixed(0)}%)`, {
+  const verdictColor =
+    report.score.verdict === 'pass' ? PASS : report.score.verdict === 'marginal' ? WARN : FAIL;
+  text(c, `Verdict: ${SCORE_VERDICT_LABEL[report.score.verdict]} — ${report.score.passing} / ${report.score.total} metrics passing (${report.score.pct.toFixed(0)}%)`, {
     size: 12,
     bold: true,
-    color: report.score.pct >= 75 ? PASS : report.score.pct >= 50 ? MID : FAIL,
+    color: verdictColor,
   });
   c.y -= 24;
 
