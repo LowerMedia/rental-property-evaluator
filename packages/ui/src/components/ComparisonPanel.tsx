@@ -1,8 +1,9 @@
 import { Fragment } from 'react';
-import { SCREENER_METRIC_CONFIG } from '@rpe/engine';
+import { SCREENER_METRIC_CONFIG, evalSignal, computeScreenerScore } from '@rpe/engine';
 import type { ScreenerResults } from '@rpe/engine';
 import { fmtCurrency, fmtPercent, fmtNumber, fmtMultiplier, NULL_DISPLAY } from '../utils/format';
 import type { Scenario } from '../state/scenarios';
+import { VerdictChip } from './VerdictChip';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -23,17 +24,7 @@ function fmtMetric(key: MetricKey, value: number | null): string {
   return fmtNumber(value, dec);
 }
 
-function evalSignal(
-  key: MetricKey,
-  value: number | null,
-): 'pass' | 'fail' | 'null' | 'neutral' {
-  if (value === null) return 'null';
-  const cfg = SCREENER_METRIC_CONFIG[key];
-  if (cfg.direction === 'none' || cfg.threshold === undefined) return 'neutral';
-  return cfg.direction === 'higher'
-    ? value >= cfg.threshold ? 'pass' : 'fail'
-    : value <= cfg.threshold ? 'pass' : 'fail';
-}
+// evalSignal is imported from @rpe/engine (RPE-108) — single source of truth.
 
 // ─── Best-value indices ───────────────────────────────────────────────────────
 
@@ -60,18 +51,8 @@ function bestIndices(key: MetricKey, values: (number | null)[]): Set<number> {
 
 // ─── Score card row ───────────────────────────────────────────────────────────
 
-const SCORED_KEYS: MetricKey[] = (
-  Object.entries(SCREENER_METRIC_CONFIG) as [MetricKey, (typeof SCREENER_METRIC_CONFIG)[MetricKey]][]
-)
-  .filter(([, cfg]) => cfg.direction !== 'none')
-  .map(([key]) => key);
-
-function scoreFor(result: ScreenerResults): { passing: number; total: number; pct: number } {
-  const signals = SCORED_KEYS.map((k) => evalSignal(k, result[k]));
-  const total = signals.filter((s) => s !== 'null').length;
-  const passing = signals.filter((s) => s === 'pass').length;
-  return { passing, total, pct: total > 0 ? (passing / total) * 100 : 0 };
-}
+// Per-scenario score (passing/total/pct + verdict) comes from @rpe/engine
+// computeScreenerScore (RPE-108) — no local re-implementation or band thresholds.
 
 // ─── Layout constants ─────────────────────────────────────────────────────────
 
@@ -163,9 +144,11 @@ export function ComparisonPanel({ scenarios, resultsList }: ComparisonPanelProps
               {/* empty corner */}
             </th>
             {scenarios.map((scenario, si) => {
-              const score = scoreFor(resultsList[si] ?? {} as ScreenerResults);
+              const score = computeScreenerScore(resultsList[si] ?? {} as ScreenerResults);
               const color =
-                score.pct >= 75 ? 'text-pass' : score.pct >= 50 ? 'text-warn' : 'text-fail';
+                score.verdict === 'pass' ? 'text-pass' : score.verdict === 'marginal' ? 'text-warn' : 'text-fail';
+              const barColor =
+                score.verdict === 'pass' ? 'bg-pass' : score.verdict === 'marginal' ? 'bg-warn' : 'bg-fail';
               return (
                 <th
                   key={scenario.id}
@@ -176,10 +159,13 @@ export function ComparisonPanel({ scenarios, resultsList }: ComparisonPanelProps
                     {score.passing}
                     <span className="text-lo text-xs">/{score.total}</span>
                   </div>
+                  <div className="mt-1 flex justify-center">
+                    <VerdictChip pct={score.pct} />
+                  </div>
                   {/* Mini progress bar */}
                   <div className="mt-1.5 h-0.5 rounded-full bg-raised overflow-hidden mx-2">
                     <div
-                      className={`h-full rounded-full ${score.pct >= 75 ? 'bg-pass' : score.pct >= 50 ? 'bg-warn' : 'bg-fail'}`}
+                      className={`h-full rounded-full ${barColor}`}
                       style={{ width: `${score.pct}%` }}
                     />
                   </div>

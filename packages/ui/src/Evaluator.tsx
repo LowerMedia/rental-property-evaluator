@@ -1,9 +1,11 @@
 import { useMemo, useState, useCallback, useEffect } from 'react';
-import { evaluate, SCREENER_METRIC_CONFIG, calcLoanAmount, normalizeInputs } from '@rpe/engine';
+import { evaluate, SCREENER_METRIC_CONFIG, calcLoanAmount, normalizeInputs, scoreVerdict, evalSignal, SCORED_KEYS, computeScreenerScore, type ScoreVerdict } from '@rpe/engine';
+import { VerdictChip } from './components/VerdictChip';
 import type { DealInputs, ScreenerResults, ProFormaResults } from '@rpe/engine';
 import { useSavedDeals } from './hooks/useSavedDeals';
 import { useScenarios } from './hooks/useScenarios';
-import { buildShareUrl } from './utils/shareUrl';
+import { buildShareUrl, parseShareParam, parseShareMode } from './utils/shareUrl';
+import { resolveInitialMode, persistMode, type ModePreference } from './state/modePreference';
 import { exportToCsv } from './utils/exportCsv';
 import { AdSlot } from './components/AdSlot';
 import { DealInputsForm } from './components/inputs/DealInputsForm';
@@ -50,14 +52,7 @@ function fmtMetric(key: MetricKey, value: number | null): string {
   return fmtNumber(value, dec);
 }
 
-function evalSignal(key: MetricKey, value: number | null): 'pass' | 'fail' | 'null' | 'neutral' {
-  if (value === null) return 'null';
-  const cfg = SCREENER_METRIC_CONFIG[key];
-  if (cfg.direction === 'none' || cfg.threshold === undefined) return 'neutral';
-  return cfg.direction === 'higher'
-    ? value >= cfg.threshold ? 'pass' : 'fail'
-    : value <= cfg.threshold ? 'pass' : 'fail';
-}
+// evalSignal is imported from @rpe/engine (RPE-108) — single source of truth for per-metric pass/fail.
 
 const SIGNAL_CLASS: Record<ReturnType<typeof evalSignal>, string> = {
   pass: 'text-pass',
@@ -142,13 +137,59 @@ function ResultGroup({ title, children }: { title: string; children: React.React
 }
 
 /**
- * All scored metric keys (direction !== 'none') — used by the full ScoreCard in complex mode.
+ * RPE-109 — "Key metrics" strip. Pins the decision-driving metrics (Cash Flow,
+ * DSCR, Cash-on-Cash, Cap Rate) above the full grouped list so a buy/pass call
+ * doesn't require reading every row. Same pass/fail signals as the list; these
+ * metrics also remain in their groups below. Null metrics (e.g. a cash purchase
+ * has no DSCR) are dropped from the strip.
  */
-const SCORED_KEYS: MetricKey[] = (
-  Object.entries(SCREENER_METRIC_CONFIG) as [MetricKey, (typeof SCREENER_METRIC_CONFIG)[MetricKey]][]
-)
-  .filter(([, cfg]) => cfg.direction !== 'none')
-  .map(([key]) => key);
+const KEY_METRICS: { key: MetricKey; label?: string }[] = [
+  { key: 'cashFlowMonthly', label: 'Cash Flow / mo' },
+  { key: 'dscr' },
+  { key: 'cocRoi' },
+  { key: 'capRate' },
+];
+
+function KeyMetricCard({ metricKey, result, label }: { metricKey: MetricKey; result: ScreenerResults; label?: string }) {
+  const cfg = SCREENER_METRIC_CONFIG[metricKey];
+  const signal = evalSignal(metricKey, result[metricKey]);
+  return (
+    <div className="flex min-w-0 flex-col gap-1 rounded border border-border bg-surface px-3 py-2.5">
+      <span className="flex items-center gap-1.5">
+        <span className={`shrink-0 w-1.5 h-1.5 rounded-full ${DOT_CLASS[signal]}`} aria-hidden="true" />
+        <span
+          className="truncate rounded-sm text-[10px] uppercase tracking-widest text-lo outline-none focus-visible:ring-1 focus-visible:ring-accent"
+          tabIndex={0}
+          title={cfg.description}
+          aria-label={`${label ?? cfg.label}: ${cfg.description}`}
+        >
+          {label ?? cfg.label}
+        </span>
+      </span>
+      <span className={`num font-mono text-base tabular-nums ${SIGNAL_CLASS[signal]}`}>
+        {fmtMetric(metricKey, result[metricKey])}
+      </span>
+    </div>
+  );
+}
+
+/** Decision-driving metrics pinned above the full list (RPE-109). */
+function KeyMetrics({ result }: { result: ScreenerResults }) {
+  const shown = KEY_METRICS.filter(({ key }) => result[key] !== null);
+  if (shown.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-2">
+      <h3 className="section-title text-xs">Key Metrics</h3>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {shown.map(({ key, label }) => (
+          <KeyMetricCard key={key} metricKey={key} result={result} label={label} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// SCORED_KEYS (all metrics with a pass/fail threshold) is imported from @rpe/engine (RPE-108).
 
 /**
  * Scored keys visible in simple mode — intersection of SCORED_KEYS and SIMPLE_RESULT_KEYS.
@@ -171,25 +212,27 @@ function fmtThreshold(cfg: (typeof SCREENER_METRIC_CONFIG)[MetricKey]): string {
 }
 
 /**
- * Score = passing ÷ scored metrics (the visible subset in simple mode).
- * Single source of truth for both the full ScoreCard and the mobile
- * StickyScoreBar (RPE-112).
+ * Score = passing ÷ scored metrics (the visible subset in simple mode), via the
+ * engine's computeScreenerScore (single source of truth, RPE-108). The UI only
+ * picks the mode-specific key set; aggregation + verdict band live in @rpe/engine.
  */
 function computeScore(result: ScreenerResults, uiMode: UiMode) {
   const scoredKeys = uiMode === 'simple' ? SIMPLE_SCORED_KEYS : SCORED_KEYS;
-  const signals = scoredKeys.map((k) => evalSignal(k, result[k]));
-  const total = signals.filter((s) => s !== 'null').length;
-  const passing = signals.filter((s) => s === 'pass').length;
-  const pct = total > 0 ? (passing / total) * 100 : 0;
+  const { passing, total, pct } = computeScreenerScore(result, scoredKeys);
   return { scoredKeys, total, passing, pct };
 }
 
-/** Score band → Tailwind tokens. ≥75% green, ≥50% amber, below red. */
-function scoreBand(pct: number): { text: string; bg: string } {
-  if (pct >= 75) return { text: 'text-pass', bg: 'bg-pass' };
-  if (pct >= 50) return { text: 'text-warn', bg: 'bg-warn' };
-  return { text: 'text-fail', bg: 'bg-fail' };
+/** Score band → Tailwind tokens, keyed off the engine verdict (single source of truth, RPE-108). */
+function scoreBand(pct: number): { verdict: ScoreVerdict; text: string; bg: string } {
+  const verdict = scoreVerdict(pct);
+  const tokens =
+    verdict === 'pass' ? { text: 'text-pass', bg: 'bg-pass' } :
+    verdict === 'marginal' ? { text: 'text-warn', bg: 'bg-warn' } :
+    { text: 'text-fail', bg: 'bg-fail' };
+  return { verdict, ...tokens };
 }
+
+// VerdictChip is in ./components/VerdictChip (RPE-108), shared with ProFormaPanel.
 
 function ScoreCard({ result, uiMode = 'complex' }: { result: ScreenerResults; uiMode?: UiMode }) {
   const [explainOpen, setExplainOpen] = useState(false);
@@ -198,8 +241,11 @@ function ScoreCard({ result, uiMode = 'complex' }: { result: ScreenerResults; ui
 
   return (
     <div className="rounded border border-border bg-surface p-4">
-      <div className="flex items-baseline justify-between mb-2">
-        <span className="section-title text-xs">Score</span>
+      <div className="flex items-center justify-between mb-2">
+        <span className="flex items-center gap-2">
+          <span className="section-title text-xs">Score</span>
+          <VerdictChip pct={pct} />
+        </span>
         <span className={`num text-lg font-mono ${scoreColor}`}>
           {passing}<span className="text-lo text-sm">/{total}</span>
         </span>
@@ -271,12 +317,13 @@ function StickyScoreBar({ result, uiMode }: { result: ScreenerResults; uiMode: U
       className="no-print lg:hidden sticky top-0 z-20 flex min-h-[44px] items-center justify-between gap-4 border-b border-border bg-base px-5 py-2"
       aria-label={`Score: ${passing} of ${total} metrics passing. Jump to results.`}
     >
-      <span className="flex items-baseline gap-2">
+      <span className="flex items-center gap-2">
         <span className="section-title text-xs">Score</span>
         <span className={`num font-mono text-base ${band.text}`}>
           {passing}
           <span className="text-lo text-xs">/{total}</span>
         </span>
+        <VerdictChip pct={pct} />
       </span>
       <span className="flex max-w-[45%] flex-1 items-center gap-2">
         <span className="h-1 flex-1 overflow-hidden rounded-full bg-raised">
@@ -370,6 +417,9 @@ function ResultsPanel({
   return (
     <div className="flex flex-col gap-4">
       <ScoreCard result={results} uiMode={uiMode} />
+
+      {/* ── Key metrics strip (RPE-109) ──────────────────────────────────────── */}
+      <KeyMetrics result={results} />
 
       {/* ── Assumptions accordion (simple mode, RPE-119) ─────────────────────── */}
       {simple && (
@@ -541,11 +591,11 @@ function UiModeToggle({ uiMode, onChange }: UiModeToggleProps) {
 
 // ─── Share button ─────────────────────────────────────────────────────────────
 
-function ShareButton({ inputs }: { inputs: DealInputs }) {
+function ShareButton({ inputs, uiMode, proFormaMode }: { inputs: DealInputs; uiMode: UiMode; proFormaMode: boolean }) {
   const [copied, setCopied] = useState(false);
 
   const handleShare = useCallback(async () => {
-    const url = buildShareUrl(inputs);
+    const url = buildShareUrl(inputs, undefined, { uiMode, proFormaMode });
     try {
       await navigator.clipboard.writeText(url);
     } catch {
@@ -555,7 +605,7 @@ function ShareButton({ inputs }: { inputs: DealInputs }) {
     }
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
-  }, [inputs]);
+  }, [inputs, uiMode, proFormaMode]);
 
   return (
     <button
@@ -629,7 +679,16 @@ function EvaluatorInner({ adConfig, authEnabled }: { adConfig?: AdConfig; authEn
 
   const { deals, save, rename, remove } = useSavedDeals();
 
-  const [proFormaMode, setProFormaMode] = useState(false);
+  /**
+   * Initial view mode (RPE-110): first-run defaults to Simple / Screener (the
+   * fast triage path); thereafter the last-used mode is restored from
+   * localStorage. A shared-scenario link (?s=) may carry its own mode (?m=)
+   * that overrides this.
+   */
+  const [initialMode] = useState<ModePreference>(() =>
+    resolveInitialMode(parseShareParam() !== null ? parseShareMode() : null),
+  );
+  const [proFormaMode, setProFormaMode] = useState(initialMode.proFormaMode);
 
   /**
    * UI complexity mode — 'simple' hides advanced inputs and results and
@@ -637,7 +696,7 @@ function EvaluatorInner({ adConfig, authEnabled }: { adConfig?: AdConfig; authEn
    * ComparisonPanel and ProFormaPanel are not uiMode-aware (E8 does not
    * require them to be).
    */
-  const [uiMode, setUiMode] = useState<UiMode>('complex');
+  const [uiMode, setUiMode] = useState<UiMode>(initialMode.uiMode);
 
   /**
    * Switch UI mode. Switching to simple also forces screener mode because
@@ -645,9 +704,10 @@ function EvaluatorInner({ adConfig, authEnabled }: { adConfig?: AdConfig; authEn
    */
   const handleSetUiMode = useCallback((mode: UiMode) => {
     setUiMode(mode);
-    if (mode === 'simple' && proFormaMode) {
-      setProFormaMode(false);
-    }
+    // Pro-forma requires complex inputs; switching to simple forces screener.
+    const nextProForma = mode === 'simple' ? false : proFormaMode;
+    if (nextProForma !== proFormaMode) setProFormaMode(nextProForma);
+    persistMode({ uiMode: mode, proFormaMode: nextProForma }); // RPE-110
   }, [proFormaMode]);
 
   const [showSettings, setShowSettings] = useState(false);
@@ -719,6 +779,7 @@ function EvaluatorInner({ adConfig, authEnabled }: { adConfig?: AdConfig; authEn
   /** Seed pro-forma defaults into state the first time the user enters pro-forma mode. */
   const handleSetProFormaMode = useCallback((pf: boolean) => {
     setProFormaMode(pf);
+    persistMode({ uiMode, proFormaMode: pf }); // RPE-110
     if (pf) {
       // Only dispatch defaults for fields that are currently undefined/absent so we
       // don't overwrite values the user has already entered.
@@ -733,7 +794,7 @@ function EvaluatorInner({ adConfig, authEnabled }: { adConfig?: AdConfig; authEn
       if (activeInputs.sellingCostsPct === undefined)
         dispatchToActive({ type: 'SET_NUMBER', field: 'sellingCostsPct', value: 6 });
     }
-  }, [activeInputs, dispatchToActive]);
+  }, [activeInputs, dispatchToActive, uiMode]);
 
   /**
    * Evaluate all scenarios. In simple mode each scenario's inputs are run
@@ -838,7 +899,7 @@ function EvaluatorInner({ adConfig, authEnabled }: { adConfig?: AdConfig; authEn
             onDelete={remove}
             onRename={rename}
           />
-          <ShareButton inputs={activeInputs} />
+          <ShareButton inputs={activeInputs} uiMode={uiMode} proFormaMode={proFormaMode} />
           <button
             type="button"
             onClick={() => exportToCsv(scenarios, resultsList)}
@@ -932,7 +993,7 @@ function EvaluatorInner({ adConfig, authEnabled }: { adConfig?: AdConfig; authEn
           className="lg:overflow-y-auto p-5"
         >
           {proFormaMode && proFormaResults ? (
-            <ProFormaPanel results={proFormaResults} purchasePrice={activeNormalized.purchasePrice} />
+            <ProFormaPanel results={proFormaResults} purchasePrice={activeNormalized.purchasePrice} screenerPct={computeScore(activeResults, uiMode).pct} />
           ) : isComparing ? (
             <ComparisonPanel scenarios={scenarios} resultsList={resultsList} />
           ) : (

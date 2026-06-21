@@ -112,7 +112,7 @@ export const SCREENER_METRIC_CONFIG: Readonly<
     direction: 'higher',
     threshold: 5,
     label: 'Cap Rate',
-    description: 'NOI ÷ purchase price. Market-dependent; 5% is a common minimum.',
+    description: 'NOI ÷ purchase price (or all-in cost — price + rehab + out-of-pocket closing — when the all-in basis toggle is on). Market-dependent; 5% is a common minimum.',
     unit: '%',
     decimals: 2,
   },

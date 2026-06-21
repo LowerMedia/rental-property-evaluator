@@ -5,6 +5,28 @@ import type { DealInputs } from '@rpe/engine';
 /** URL query-param key used for the encoded share payload. */
 export const SHARE_PARAM = 's';
 
+/** URL query-param key for the encoded view mode (RPE-110). */
+export const MODE_PARAM = 'm';
+
+/** View mode carried by a share link: uiMode + pro-forma flag. */
+export type ShareMode = { uiMode: 'simple' | 'complex'; proFormaMode: boolean };
+
+/** Encode a view mode as a 2-char code: [s|c][s|p]. */
+function encodeMode(mode: ShareMode): string {
+  return `${mode.uiMode === 'simple' ? 's' : 'c'}${mode.proFormaMode ? 'p' : 's'}`;
+}
+
+/**
+ * Parse the view mode from the `?m=` param of a shared link (RPE-110).
+ * Returns null when absent or malformed. Pro-forma is only valid in complex mode.
+ */
+export function parseShareMode(search?: string): ShareMode | null {
+  const qs = search ?? (typeof window !== 'undefined' ? window.location.search : '');
+  const code = new URLSearchParams(qs).get(MODE_PARAM);
+  if (code !== 'ss' && code !== 'cs' && code !== 'cp') return null;
+  return { uiMode: code[0] === 's' ? 'simple' : 'complex', proFormaMode: code === 'cp' };
+}
+
 // ─── Encode / decode ──────────────────────────────────────────────────────────
 
 /**
@@ -58,7 +80,7 @@ export function parseShareParam(search?: string): DealInputs | null {
  *
  * Returns `''` if no URL can be constructed (e.g. SSR without `base`).
  */
-export function buildShareUrl(inputs: DealInputs, base?: string): string {
+export function buildShareUrl(inputs: DealInputs, base?: string, mode?: ShareMode): string {
   let url: URL;
   try {
     url = new URL(base ?? (typeof window !== 'undefined' ? window.location.href : ''));
@@ -66,5 +88,6 @@ export function buildShareUrl(inputs: DealInputs, base?: string): string {
     return '';
   }
   url.searchParams.set(SHARE_PARAM, encodeInputs(inputs));
+  if (mode) url.searchParams.set(MODE_PARAM, encodeMode(mode));
   return url.toString();
 }

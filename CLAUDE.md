@@ -8,7 +8,7 @@ pnpm 10 monorepo — `packages/engine` (pure calc), `packages/ui` (React 18 SPA)
 
 Follows the canonical LowerMedia strategy (`~/Library/Mobile Documents/com~apple~CloudDocs/Brain/conventions/git-strategy.md`).
 
-- **Release branch:** `v1.11.0` (current)
+- **Release branch:** `v1.12.0` (current)
 - **Task branches** cut from the current release branch, named exactly after the ticket handle (e.g. `RPE-42`)
 - **Every commit** prefixed with the ticket handle
 - **Jira project:** `RPE` at `lowermedia.atlassian.net` — cloudId `f1fa5126-9e62-47aa-897d-d6ca956bc26c`
@@ -30,6 +30,7 @@ Follows the canonical LowerMedia strategy (`~/Library/Mobile Documents/com~apple
 | v1.8.0  | `v1.8.0` | RPE-98 go-live infra (DO App Platform specs, Dockerfile, pg TLS/migration hardening, runbook; dev+stage live) + RPE-99 favicon (see `docs/releases/v1.8.0.md`) |
 | v1.9.0  | `v1.9.0` | First release on prod: RPE-113 ZIP→state resolution (location "pending" fix), RPE-114 header wrap, RPE-115 dev env (see `docs/releases/v1.9.0.md`) |
 | v1.10.0 | `v1.10.0` | UX polish: RPE-119 assumptions accordion, RPE-116 complex-mode region tax/insurance prefill, RPE-118 a11y metric tooltips (see `docs/releases/v1.10.0.md`) |
+| v1.11.0 | `v1.11.0` | Mobile polish: RPE-101 single-document scroll, RPE-102 44px toolbar tap targets, RPE-112 sticky mobile score header + numeric ZIP (see `docs/releases/v1.11.0.md`) |
 
 ### Copilot review loop
 
