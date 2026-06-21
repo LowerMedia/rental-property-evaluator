@@ -64,6 +64,29 @@ function refDeal(overrides: Partial<DealInputs> = {}): DealInputs {
   };
 }
 
+// ─── Cap rate basis (RPE-105) ─────────────────────────────────────────────────
+
+describe('Cap rate all-in basis (RPE-105)', () => {
+  it('defaults to purchase-price basis (unchanged by rehab/closing)', () => {
+    expect(r(calcScreener(refDeal({ rehab: 20_000 })).capRate!)).toBe(6.27);
+  });
+
+  it('all-in basis includes rehab + out-of-pocket closing', () => {
+    // basis = 200,000 + 20,000 rehab + 4,000 closing (not rolled) = 224,000
+    expect(r(calcScreener(refDeal({ rehab: 20_000, capRateAllIn: true })).capRate!)).toBe(5.6);
+  });
+
+  it('all-in basis excludes closing when it is rolled into the loan', () => {
+    // basis = 200,000 + 20,000 rehab + 0 closing = 220,000
+    const res = calcScreener(refDeal({ rehab: 20_000, capRateAllIn: true, rollClosingCostsIntoLoan: true }));
+    expect(r(res.capRate!)).toBe(5.7);
+  });
+
+  it('all-in with no rehab and rolled closing equals the price basis', () => {
+    expect(r(calcScreener(refDeal({ capRateAllIn: true, rollClosingCostsIntoLoan: true })).capRate!)).toBe(6.27);
+  });
+});
+
 // ─── EGI ─────────────────────────────────────────────────────────────────────
 
 describe('EGI', () => {

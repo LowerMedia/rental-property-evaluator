@@ -57,6 +57,7 @@ export const INPUT_TIER: Readonly<Record<InputFieldKey, ComplexityTier>> = {
   closingCosts: 'complex',
   rollClosingCostsIntoLoan: 'complex',
   rehab: 'complex',
+  capRateAllIn: 'complex',
   otherIncome: 'complex',
   capExInNOI: 'complex',
   // DealExpenses sub-fields:

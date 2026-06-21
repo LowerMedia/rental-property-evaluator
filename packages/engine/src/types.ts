@@ -48,6 +48,12 @@ export interface DealInputs {
   closingCosts: number;
   rollClosingCostsIntoLoan: boolean;
   rehab?: number;
+  /**
+   * RPE-105 — when true, cap rate divides NOI by the all-in cost
+   * (purchasePrice + rehab + out-of-pocket closing) instead of purchasePrice.
+   * Optional; defaults to false (purchase-price basis, unchanged).
+   */
+  capRateAllIn?: boolean;
 
   // ── Income ─────────────────────────────────────────────────────────────────
   /** Monthly gross rent (gross potential rent before vacancy). */

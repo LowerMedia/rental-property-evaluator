@@ -120,9 +120,15 @@ export function calcScreener(inputs: DealInputs): ScreenerResults {
   const noiMonthly = egi - opExMonthly;
   const noiAnnual = noiMonthly * 12;
 
+  // ── Cost basis (shared by cap rate + total cash invested) ─────────────────
+  const closingCostsOut = inputs.rollClosingCostsIntoLoan ? 0 : inputs.closingCosts;
+  const rehab = inputs.rehab ?? 0;
+
   // ── Cap rate ──────────────────────────────────────────────────────────────
-  // NOI_annual / purchasePrice × 100
-  const capRate = (noiAnnual / purchasePrice) * 100;
+  // NOI_annual / basis × 100. Basis is purchasePrice by default, or the all-in
+  // cost (purchasePrice + rehab + out-of-pocket closing) when capRateAllIn (RPE-105).
+  const capRateBasis = inputs.capRateAllIn ? purchasePrice + rehab + closingCostsOut : purchasePrice;
+  const capRate = (noiAnnual / capRateBasis) * 100;
 
   // ── Cash flow ─────────────────────────────────────────────────────────────
   // Monthly: NOI_monthly − mortgagePayment (if no loan, CF = NOI)
@@ -133,8 +139,6 @@ export function calcScreener(inputs: DealInputs): ScreenerResults {
   // ── Total cash invested ───────────────────────────────────────────────────
   // downPayment + closingCosts (if not rolled into loan) + rehab
   const downPayment = purchasePrice * (inputs.percentDown / 100);
-  const closingCostsOut = inputs.rollClosingCostsIntoLoan ? 0 : inputs.closingCosts;
-  const rehab = inputs.rehab ?? 0;
   const totalCashInvested = downPayment + closingCostsOut + rehab;
 
   // ── CoC ROI ───────────────────────────────────────────────────────────────
