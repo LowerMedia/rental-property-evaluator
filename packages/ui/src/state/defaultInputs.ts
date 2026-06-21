@@ -13,6 +13,7 @@ export const DEFAULT_INPUTS: DealInputs = {
   closingCosts: 6_000,
   rollClosingCostsIntoLoan: false,
   rehab: 0,
+  capRateAllIn: false,
   grossRent: 2_200,
   otherIncome: 0,
   vacancyPct: 5,
