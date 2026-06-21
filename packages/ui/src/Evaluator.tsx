@@ -4,7 +4,8 @@ import { VerdictChip } from './components/VerdictChip';
 import type { DealInputs, ScreenerResults, ProFormaResults } from '@rpe/engine';
 import { useSavedDeals } from './hooks/useSavedDeals';
 import { useScenarios } from './hooks/useScenarios';
-import { buildShareUrl } from './utils/shareUrl';
+import { buildShareUrl, parseShareParam, parseShareMode } from './utils/shareUrl';
+import { resolveInitialMode, persistMode, type ModePreference } from './state/modePreference';
 import { exportToCsv } from './utils/exportCsv';
 import { AdSlot } from './components/AdSlot';
 import { DealInputsForm } from './components/inputs/DealInputsForm';
@@ -590,11 +591,11 @@ function UiModeToggle({ uiMode, onChange }: UiModeToggleProps) {
 
 // ─── Share button ─────────────────────────────────────────────────────────────
 
-function ShareButton({ inputs }: { inputs: DealInputs }) {
+function ShareButton({ inputs, uiMode, proFormaMode }: { inputs: DealInputs; uiMode: UiMode; proFormaMode: boolean }) {
   const [copied, setCopied] = useState(false);
 
   const handleShare = useCallback(async () => {
-    const url = buildShareUrl(inputs);
+    const url = buildShareUrl(inputs, undefined, { uiMode, proFormaMode });
     try {
       await navigator.clipboard.writeText(url);
     } catch {
@@ -604,7 +605,7 @@ function ShareButton({ inputs }: { inputs: DealInputs }) {
     }
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
-  }, [inputs]);
+  }, [inputs, uiMode, proFormaMode]);
 
   return (
     <button
@@ -678,7 +679,16 @@ function EvaluatorInner({ adConfig, authEnabled }: { adConfig?: AdConfig; authEn
 
   const { deals, save, rename, remove } = useSavedDeals();
 
-  const [proFormaMode, setProFormaMode] = useState(false);
+  /**
+   * Initial view mode (RPE-110): first-run defaults to Simple / Screener (the
+   * fast triage path); thereafter the last-used mode is restored from
+   * localStorage. A shared-scenario link (?s=) may carry its own mode (?m=)
+   * that overrides this.
+   */
+  const [initialMode] = useState<ModePreference>(() =>
+    resolveInitialMode(parseShareParam() !== null ? parseShareMode() : null),
+  );
+  const [proFormaMode, setProFormaMode] = useState(initialMode.proFormaMode);
 
   /**
    * UI complexity mode — 'simple' hides advanced inputs and results and
@@ -686,7 +696,7 @@ function EvaluatorInner({ adConfig, authEnabled }: { adConfig?: AdConfig; authEn
    * ComparisonPanel and ProFormaPanel are not uiMode-aware (E8 does not
    * require them to be).
    */
-  const [uiMode, setUiMode] = useState<UiMode>('complex');
+  const [uiMode, setUiMode] = useState<UiMode>(initialMode.uiMode);
 
   /**
    * Switch UI mode. Switching to simple also forces screener mode because
@@ -694,9 +704,10 @@ function EvaluatorInner({ adConfig, authEnabled }: { adConfig?: AdConfig; authEn
    */
   const handleSetUiMode = useCallback((mode: UiMode) => {
     setUiMode(mode);
-    if (mode === 'simple' && proFormaMode) {
-      setProFormaMode(false);
-    }
+    // Pro-forma requires complex inputs; switching to simple forces screener.
+    const nextProForma = mode === 'simple' ? false : proFormaMode;
+    if (nextProForma !== proFormaMode) setProFormaMode(nextProForma);
+    persistMode({ uiMode: mode, proFormaMode: nextProForma }); // RPE-110
   }, [proFormaMode]);
 
   const [showSettings, setShowSettings] = useState(false);
@@ -768,6 +779,7 @@ function EvaluatorInner({ adConfig, authEnabled }: { adConfig?: AdConfig; authEn
   /** Seed pro-forma defaults into state the first time the user enters pro-forma mode. */
   const handleSetProFormaMode = useCallback((pf: boolean) => {
     setProFormaMode(pf);
+    persistMode({ uiMode, proFormaMode: pf }); // RPE-110
     if (pf) {
       // Only dispatch defaults for fields that are currently undefined/absent so we
       // don't overwrite values the user has already entered.
@@ -782,7 +794,7 @@ function EvaluatorInner({ adConfig, authEnabled }: { adConfig?: AdConfig; authEn
       if (activeInputs.sellingCostsPct === undefined)
         dispatchToActive({ type: 'SET_NUMBER', field: 'sellingCostsPct', value: 6 });
     }
-  }, [activeInputs, dispatchToActive]);
+  }, [activeInputs, dispatchToActive, uiMode]);
 
   /**
    * Evaluate all scenarios. In simple mode each scenario's inputs are run
@@ -887,7 +899,7 @@ function EvaluatorInner({ adConfig, authEnabled }: { adConfig?: AdConfig; authEn
             onDelete={remove}
             onRename={rename}
           />
-          <ShareButton inputs={activeInputs} />
+          <ShareButton inputs={activeInputs} uiMode={uiMode} proFormaMode={proFormaMode} />
           <button
             type="button"
             onClick={() => exportToCsv(scenarios, resultsList)}

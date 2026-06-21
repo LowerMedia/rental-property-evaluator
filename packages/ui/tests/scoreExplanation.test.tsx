@@ -22,6 +22,9 @@ describe('ScoreCard explanation disclosure (RPE-70)', () => {
   });
 
   function openDisclosure() {
+    // RPE-110: first-run default is now Simple; this suite asserts the full
+    // complex-mode scored-metric list, so pin complex mode before rendering.
+    localStorage.setItem('rpe_mode', JSON.stringify({ uiMode: 'complex', proFormaMode: false }));
     render(<Evaluator />);
     const toggle = screen.getAllByRole('button', { name: /How is this scored/ })[0];
     expect(toggle.getAttribute('aria-expanded')).toBe('false');

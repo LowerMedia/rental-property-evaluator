@@ -3,11 +3,45 @@ import {
   encodeInputs,
   decodeInputs,
   parseShareParam,
+  parseShareMode,
   buildShareUrl,
   SHARE_PARAM,
 } from '../src/utils/shareUrl';
 import { DEFAULT_INPUTS } from '../src/state/defaultInputs';
 import type { DealInputs } from '@rpe/engine';
+
+// ─── view mode (RPE-110) ──────────────────────────────────────────────────────
+
+describe('parseShareMode / buildShareUrl mode (RPE-110)', () => {
+  const B = 'https://x.test/';
+
+  it('encodes the view mode in the m param', () => {
+    expect(buildShareUrl(DEFAULT_INPUTS, B, { uiMode: 'simple', proFormaMode: false })).toContain('m=ss');
+    expect(buildShareUrl(DEFAULT_INPUTS, B, { uiMode: 'complex', proFormaMode: false })).toContain('m=cs');
+    expect(buildShareUrl(DEFAULT_INPUTS, B, { uiMode: 'complex', proFormaMode: true })).toContain('m=cp');
+  });
+
+  it('omits the m param when no mode is given', () => {
+    expect(buildShareUrl(DEFAULT_INPUTS, B)).not.toContain('m=');
+  });
+
+  it('parses the mode codes', () => {
+    expect(parseShareMode('?m=ss')).toEqual({ uiMode: 'simple', proFormaMode: false });
+    expect(parseShareMode('?m=cs')).toEqual({ uiMode: 'complex', proFormaMode: false });
+    expect(parseShareMode('?m=cp')).toEqual({ uiMode: 'complex', proFormaMode: true });
+  });
+
+  it('returns null for an absent or malformed mode', () => {
+    expect(parseShareMode('?s=abc')).toBeNull();
+    expect(parseShareMode('?m=zz')).toBeNull();
+    expect(parseShareMode('?m=sp')).toBeNull();
+  });
+
+  it('round-trips through buildShareUrl', () => {
+    const url = buildShareUrl(DEFAULT_INPUTS, B, { uiMode: 'complex', proFormaMode: true });
+    expect(parseShareMode(new URL(url).search)).toEqual({ uiMode: 'complex', proFormaMode: true });
+  });
+});
 
 // ─── encodeInputs / decodeInputs ──────────────────────────────────────────────
 
