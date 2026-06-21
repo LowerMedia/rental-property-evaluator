@@ -180,6 +180,11 @@ export function DealInputsForm({
               emptyZero
               hint="Added to total cash invested; not financed"
             />
+            <ToggleInput
+              label="Cap Rate on All-In Basis"
+              value={state.capRateAllIn ?? false}
+              onChange={(v) => dispatch({ type: 'SET_BOOL', field: 'capRateAllIn', value: v })}
+            />
           </>
         )}
       </InputSection>

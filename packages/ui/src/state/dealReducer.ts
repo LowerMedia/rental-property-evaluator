@@ -26,7 +26,7 @@ type NumericDealKey =
   | 'discountRatePct';
 
 /** All top-level DealInputs keys that hold a boolean (or undefined boolean). */
-type BooleanDealKey = 'rollClosingCostsIntoLoan' | 'capExInNOI';
+type BooleanDealKey = 'rollClosingCostsIntoLoan' | 'capExInNOI' | 'capRateAllIn';
 
 // ─── Actions ─────────────────────────────────────────────────────────────────
 

@@ -72,6 +72,7 @@ export function normalizeInputs(raw: DealInputs): DealInputs {
     rollClosingCostsIntoLoan: Boolean(raw.rollClosingCostsIntoLoan),
 
     rehab: raw.rehab !== undefined ? clampNonNeg(safeNum(raw.rehab)) : undefined,
+    capRateAllIn: Boolean(raw.capRateAllIn),
 
     grossRent: clampNonNeg(safeNum(raw.grossRent)),
     otherIncome:
