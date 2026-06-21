@@ -8,7 +8,7 @@ pnpm 10 monorepo — `packages/engine` (pure calc), `packages/ui` (React 18 SPA)
 
 Follows the canonical LowerMedia strategy (`~/Library/Mobile Documents/com~apple~CloudDocs/Brain/conventions/git-strategy.md`).
 
-- **Release branch:** `v1.12.0` (current)
+- **Release branch:** `v1.13.0` (current)
 - **Task branches** cut from the current release branch, named exactly after the ticket handle (e.g. `RPE-42`)
 - **Every commit** prefixed with the ticket handle
 - **Jira project:** `RPE` at `lowermedia.atlassian.net` — cloudId `f1fa5126-9e62-47aa-897d-d6ca956bc26c`
@@ -31,6 +31,7 @@ Follows the canonical LowerMedia strategy (`~/Library/Mobile Documents/com~apple
 | v1.9.0  | `v1.9.0` | First release on prod: RPE-113 ZIP→state resolution (location "pending" fix), RPE-114 header wrap, RPE-115 dev env (see `docs/releases/v1.9.0.md`) |
 | v1.10.0 | `v1.10.0` | UX polish: RPE-119 assumptions accordion, RPE-116 complex-mode region tax/insurance prefill, RPE-118 a11y metric tooltips (see `docs/releases/v1.10.0.md`) |
 | v1.11.0 | `v1.11.0` | Mobile polish: RPE-101 single-document scroll, RPE-102 44px toolbar tap targets, RPE-112 sticky mobile score header + numeric ZIP (see `docs/releases/v1.11.0.md`) |
+| v1.12.0 | `v1.12.0` | Scoring + onboarding: RPE-108 verdict chip (engine band SoT + CSV/PDF), RPE-109 key-metrics strip, RPE-105 cap-rate all-in toggle, RPE-110 first-run Simple + persisted mode (see `docs/releases/v1.12.0.md`) |
 
 ### Copilot review loop
 
@@ -42,7 +43,7 @@ Origin is configured at `github.com:LowerMedia/rental-property-evaluator`. Full 
 pnpm lint && pnpm typecheck && pnpm test && pnpm build
 ```
 
-All four must pass. Tests currently: 965 tests, 68 files. Two release
+All four must pass. Tests currently: 991 tests, 70 files. Two release
 gates ride in `pnpm test` and a red gate blocks the release: the API
 regression suite (apps/api/tests/regression.test.ts) and the E11 auth
 security gate (apps/api/tests/authGate.test.ts) — see
@@ -52,7 +53,7 @@ docs/api-testing.md.
 
 Production is **DigitalOcean App Platform** at `https://rentalpropertyevaluator.com`
 (NOT rpe.lowermedia.net), behind Cloudflare DNS, with alias domains
-`rpe.lowprop.com` and `rpe.goldfinchproperties.com` (RPE-98). Specs live in
+`rpe.lowprop.com` and `rpe.goldfinchpropertygroup.com` (RPE-98). Specs live in
 `.do/`: prod tracks `main`, `stage.rentalpropertyevaluator.com` tracks the
 current release branch (bump `app.staging.yaml` on each release cut),
 `dev.rentalpropertyevaluator.com` tracks `develop`. The api ships via
